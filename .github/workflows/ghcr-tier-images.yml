@@ -78,6 +78,13 @@ jobs:
       # One shared GHA cache scope per arch: the buildx builder persists across
       # steps within the job, so the later tiers reuse the builder stage locally
       # and only the first upload pays the gha roundtrip.
+      #
+      # OMNIROUTE_BUILD_WORKERS=2 → 1 Next page-data worker. The Dockerfile
+      # default of 3 (→ 2 workers) OOMs the 16 GB runners on this codebase —
+      # same ResourceExhausted-after-"Collecting page data" signature upstream
+      # is fixing in PR #11647 (their arm64 runs). Passed here instead of
+      # editing the Dockerfile so this branch stays conflict-free when the
+      # upstream fix lands (same value → no-op).
       - name: Build and push BASE platform image by digest
         id: build-base
         uses: docker/build-push-action@v7
@@ -87,6 +94,8 @@ jobs:
           platforms: ${{ matrix.platform }}
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           tags: ${{ env.GHCR_IMAGE }}
+          build-args: |
+            OMNIROUTE_BUILD_WORKERS=2
           cache-from: type=gha,scope=ghcr-tiers-${{ matrix.arch }}
           cache-to: type=gha,scope=ghcr-tiers-${{ matrix.arch }},mode=max
         env:
@@ -101,6 +110,8 @@ jobs:
           platforms: ${{ matrix.platform }}
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           tags: ${{ env.GHCR_IMAGE }}
+          build-args: |
+            OMNIROUTE_BUILD_WORKERS=2
           cache-from: type=gha,scope=ghcr-tiers-${{ matrix.arch }}
           cache-to: type=gha,scope=ghcr-tiers-${{ matrix.arch }},mode=max
         env:
@@ -115,6 +126,8 @@ jobs:
           platforms: ${{ matrix.platform }}
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           tags: ${{ env.GHCR_IMAGE }}
+          build-args: |
+            OMNIROUTE_BUILD_WORKERS=2
           cache-from: type=gha,scope=ghcr-tiers-${{ matrix.arch }}
           cache-to: type=gha,scope=ghcr-tiers-${{ matrix.arch }},mode=max
         env:
@@ -129,6 +142,8 @@ jobs:
           platforms: ${{ matrix.platform }}
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           tags: ${{ env.GHCR_IMAGE }}
+          build-args: |
+            OMNIROUTE_BUILD_WORKERS=2
           cache-from: type=gha,scope=ghcr-tiers-${{ matrix.arch }}
           cache-to: type=gha,scope=ghcr-tiers-${{ matrix.arch }},mode=max
         env:
@@ -143,6 +158,8 @@ jobs:
           platforms: ${{ matrix.platform }}
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           tags: ${{ env.GHCR_IMAGE }}
+          build-args: |
+            OMNIROUTE_BUILD_WORKERS=2
           cache-from: type=gha,scope=ghcr-tiers-${{ matrix.arch }}
           cache-to: type=gha,scope=ghcr-tiers-${{ matrix.arch }},mode=max
         env:
