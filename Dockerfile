@@ -338,3 +338,63 @@ RUN --mount=type=cache,id=s/92ca8a61-c1ba-421f-a389-d48ac7258c2d-npm-cache,targe
   npm install -g --no-audit --no-fund @openai/codex @anthropic-ai/claude-code droid openclaw@latest
 
 USER node
+
+# ── Runner Web+CLI (base + web + cli) ───────────────────────────────────────
+#
+#  Cumulative tier flavors published to GHCR by
+#  .github/workflows/ghcr-tier-images.yml (see docker/ghcr-tiers/README.md):
+#
+#    runner-web-cli       → base + web + cli
+#    runner-web-cli-host  → base + web + cli + host-mode defaults
+#    runner-full          → base + web + cli + host + codex-app-server role
+#
+#  runner-cli above stays browser-less by design (it drives the
+#  chatgpt-web-codex-browser sidecar over CDP); the tiers below bake Chromium
+#  in for operators who want one self-contained image.
+FROM runner-cli AS runner-web-cli
+
+USER root
+
+# Chromium + OS deps for web-cookie providers — same recipe as runner-web.
+# runner-cli already copied playwright/playwright-core into node_modules, so
+# this only downloads the browser binary and its apt dependencies.
+ENV PLAYWRIGHT_BROWSERS_PATH=/home/node/.cache/ms-playwright
+RUN --mount=type=cache,id=s/92ca8a61-c1ba-421f-a389-d48ac7258c2d-apt-cache,target=/var/cache/apt,sharing=locked \
+  --mount=type=cache,id=s/92ca8a61-c1ba-421f-a389-d48ac7258c2d-apt-lists,target=/var/lib/apt/lists,sharing=locked \
+  apt-get update \
+  && node node_modules/playwright/cli.js install chromium --with-deps \
+  && chown -R node:node /home/node/.cache \
+  && rm -rf /var/lib/apt/lists/*
+
+USER node
+
+# ── Runner Web+CLI+Host (host-mode defaults baked in) ───────────────────────
+FROM runner-web-cli AS runner-web-cli-host
+
+# The same environment the docker-compose.yml `host` profile sets: CLI binaries
+# and config homes are looked up at the /host-* mount points. "Host" cannot be
+# baked into an image — it IS the host — so this tier bakes the *defaults* and
+# still needs the operator's volume mounts (see docker-compose.ghcr.yml). It
+# stays cumulative: the global CLIs from runner-cli remain installed and
+# PATH-discoverable, so the image also works without the mounts (the host
+# lookup simply misses). Plain ENV — override any of them per-run with `-e` /
+# compose `environment:`.
+ENV CLI_MODE=host \
+  CLI_EXTRA_PATHS=/host-local/bin:/host-node/bin \
+  CLI_CONFIG_HOME=/host-home \
+  CLI_ALLOW_CONFIG_WRITES=true
+
+# ── Runner Full (… + codex-app-server role) ─────────────────────────────────
+FROM runner-web-cli-host AS runner-full
+
+# OMNIROLE switches the image between its two roles:
+#   omniroute (default)  → the Next.js server (delegates to check-permissions.sh;
+#                          CMD is inherited)
+#   codex-app-server     → `codex app-server` WS sidecar on :1456 — mirrors the
+#                          compose `codex-app-server` profile command, including
+#                          capability-token minting on first boot. The inherited
+#                          HEALTHCHECK probes the HTTP app, so compose overrides
+#                          it for the sidecar role (see docker-compose.ghcr.yml).
+COPY --chmod=755 docker/ghcr-tiers/entrypoint.sh /app/entrypoint.sh
+ENV OMNIROLE=omniroute
+ENTRYPOINT ["/app/entrypoint.sh"]

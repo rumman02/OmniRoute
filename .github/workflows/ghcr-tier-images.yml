@@ -1,0 +1,269 @@
+name: Publish tier images to GHCR (fork)
+
+# Fork-only pipeline: builds the cumulative tier flavors documented in
+# docker/ghcr-tiers/README.md and pushes them to ghcr.io/rumman02/omniroute:
+#
+#   :base            → Dockerfile target runner-base
+#   :web             → runner-web                 (base + web)
+#   :web-cli         → runner-web-cli             (base + web + cli)
+#   :web-cli-host    → runner-web-cli-host        (base + web + cli + host)
+#   :full            → runner-full                (… + codex-app-server role)
+#   :chatgpt-web-codex-browser → docker/chatgpt-web-codex-browser/Dockerfile
+#
+# Tags per tier: the mutable tier name, plus (on release branches) the
+# package.json version (e.g. 3.8.51-web-cli) and `latest` on the base tier.
+# Pattern follows .github/workflows/docker-publish.yml (digest build per arch →
+# imagetools manifest merge), minus the Docker Hub half and the release
+# machinery — this fork publishes to GHCR only.
+
+on:
+  push:
+    branches:
+      - feat/ghcr-tier-images
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Immutable version prefix (e.g. 3.8.51). Empty = derive from package.json."
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: ghcr-tier-images
+  cancel-in-progress: false
+
+# Least-privilege default; the jobs that push to GHCR grant packages: write.
+permissions:
+  contents: read
+
+env:
+  GHCR_IMAGE: ghcr.io/rumman02/omniroute
+
+jobs:
+  build:
+    name: Build tiers (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+            arch: amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            arch: arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # One shared GHA cache scope per arch: the buildx builder persists across
+      # steps within the job, so the later tiers reuse the builder stage locally
+      # and only the first upload pays the gha roundtrip.
+      - name: Build and push BASE platform image by digest
+        id: build-base
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: runner-base
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+          tags: ${{ env.GHCR_IMAGE }}
+          cache-from: type=gha,scope=ghcr-tiers-${{ matrix.arch }}
+          cache-to: type=gha,scope=ghcr-tiers-${{ matrix.arch }},mode=max
+        env:
+          DOCKER_BUILDKIT_INLINE_CACHE: 1
+
+      - name: Build and push WEB platform image by digest
+        id: build-web
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: runner-web
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+          tags: ${{ env.GHCR_IMAGE }}
+          cache-from: type=gha,scope=ghcr-tiers-${{ matrix.arch }}
+          cache-to: type=gha,scope=ghcr-tiers-${{ matrix.arch }},mode=max
+        env:
+          DOCKER_BUILDKIT_INLINE_CACHE: 1
+
+      - name: Build and push WEB-CLI platform image by digest
+        id: build-web-cli
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: runner-web-cli
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+          tags: ${{ env.GHCR_IMAGE }}
+          cache-from: type=gha,scope=ghcr-tiers-${{ matrix.arch }}
+          cache-to: type=gha,scope=ghcr-tiers-${{ matrix.arch }},mode=max
+        env:
+          DOCKER_BUILDKIT_INLINE_CACHE: 1
+
+      - name: Build and push WEB-CLI-HOST platform image by digest
+        id: build-web-cli-host
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: runner-web-cli-host
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+          tags: ${{ env.GHCR_IMAGE }}
+          cache-from: type=gha,scope=ghcr-tiers-${{ matrix.arch }}
+          cache-to: type=gha,scope=ghcr-tiers-${{ matrix.arch }},mode=max
+        env:
+          DOCKER_BUILDKIT_INLINE_CACHE: 1
+
+      - name: Build and push FULL platform image by digest
+        id: build-full
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: runner-full
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+          tags: ${{ env.GHCR_IMAGE }}
+          cache-from: type=gha,scope=ghcr-tiers-${{ matrix.arch }}
+          cache-to: type=gha,scope=ghcr-tiers-${{ matrix.arch }},mode=max
+        env:
+          DOCKER_BUILDKIT_INLINE_CACHE: 1
+
+      - name: Build and push BROWSER SIDECAR platform image by digest
+        id: build-browser
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/chatgpt-web-codex-browser/Dockerfile
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+          tags: ${{ env.GHCR_IMAGE }}
+          cache-from: type=gha,scope=ghcr-tiers-browser-${{ matrix.arch }}
+          cache-to: type=gha,scope=ghcr-tiers-browser-${{ matrix.arch }},mode=max
+        env:
+          DOCKER_BUILDKIT_INLINE_CACHE: 1
+
+      - name: Export digests
+        env:
+          DIGEST_BASE: ${{ steps.build-base.outputs.digest }}
+          DIGEST_WEB: ${{ steps.build-web.outputs.digest }}
+          DIGEST_WEB_CLI: ${{ steps.build-web-cli.outputs.digest }}
+          DIGEST_WEB_CLI_HOST: ${{ steps.build-web-cli-host.outputs.digest }}
+          DIGEST_FULL: ${{ steps.build-full.outputs.digest }}
+          DIGEST_BROWSER: ${{ steps.build-browser.outputs.digest }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/digests/base /tmp/digests/web /tmp/digests/web-cli \
+            /tmp/digests/web-cli-host /tmp/digests/full /tmp/digests/chatgpt-web-codex-browser
+          touch "/tmp/digests/base/${DIGEST_BASE#sha256:}"
+          touch "/tmp/digests/web/${DIGEST_WEB#sha256:}"
+          touch "/tmp/digests/web-cli/${DIGEST_WEB_CLI#sha256:}"
+          touch "/tmp/digests/web-cli-host/${DIGEST_WEB_CLI_HOST#sha256:}"
+          touch "/tmp/digests/full/${DIGEST_FULL#sha256:}"
+          touch "/tmp/digests/chatgpt-web-codex-browser/${DIGEST_BROWSER#sha256:}"
+
+      - name: Upload digests
+        uses: actions/upload-artifact@v7
+        with:
+          name: digests-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Publish multi-arch manifests
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Resolve version tag
+        id: version
+        run: |
+          set -euo pipefail
+          VERSION="${{ inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            VERSION=$(node -p "require('./package.json').version")
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version tag: $VERSION"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download digests
+        uses: actions/download-artifact@v8
+        with:
+          pattern: digests-*
+          path: /tmp/digests
+          merge-multiple: true
+
+      - name: Create GHCR manifests
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          create_manifest() {
+            local tier="$1"
+            local tags=(-t "${GHCR_IMAGE}:${tier}")
+            if [ -n "$VERSION" ]; then
+              tags+=(-t "${GHCR_IMAGE}:${VERSION}-${tier}")
+            fi
+            if [ "$tier" = "base" ]; then
+              tags+=(-t "${GHCR_IMAGE}:latest")
+            fi
+            local refs=()
+            while IFS= read -r digest_file; do
+              refs+=("${GHCR_IMAGE}@sha256:$(basename "$digest_file")")
+            done < <(find "/tmp/digests/${tier}" -type f | sort)
+            if [ "${#refs[@]}" -eq 0 ]; then
+              echo "No image digests for ${tier}" >&2
+              exit 1
+            fi
+            docker buildx imagetools create "${tags[@]}" "${refs[@]}"
+          }
+
+          create_manifest base
+          create_manifest web
+          create_manifest web-cli
+          create_manifest web-cli-host
+          create_manifest full
+          create_manifest chatgpt-web-codex-browser
+
+      - name: Inspect images
+        run: |
+          docker buildx imagetools inspect "${GHCR_IMAGE}:base"
+          docker buildx imagetools inspect "${GHCR_IMAGE}:full"
