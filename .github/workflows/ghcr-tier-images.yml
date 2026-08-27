@@ -24,6 +24,8 @@ on:
     paths-ignore:
       - "docs/**"
       - "**.md"
+      # Example files never affect the images — don't rebuild for them.
+      - "docker/ghcr-tiers/examples/**"
   workflow_dispatch:
     inputs:
       version:
