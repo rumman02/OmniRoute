@@ -1,0 +1,127 @@
+name: Sync tiers from upstream
+
+# Keeps the fork's feat/ghcr-tier-images branch (and therefore the GHCR tier
+# images) current with upstream diegosouzapw/OmniRoute. Runs weekly and on
+# demand; merges the upstream branch into this branch, pushes, then dispatches
+# the tier-image build (a push made with GITHUB_TOKEN does NOT trigger other
+# push-workflows — workflow_dispatch is the one documented exception, so the
+# build is dispatched explicitly).
+#
+# If the merge hits a conflict (the Dockerfile tier stages are appended at the
+# end of the file, so most upstream edits merge cleanly), the workflow opens an
+# issue instead of failing silently — resolve it by hand once and re-run.
+
+on:
+  schedule:
+    # Weekly, Monday ~04:23 UTC (off the :00 mark to avoid the fleet spike).
+    - cron: "23 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      upstream_branch:
+        description: "Upstream branch to merge (empty = highest release/v*)"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+  issues: write
+  actions: write
+
+concurrency:
+  group: ghcr-tier-sync
+  cancel-in-progress: false
+
+env:
+  TIER_BRANCH: feat/ghcr-tier-images
+  UPSTREAM_REPO: https://github.com/diegosouzapw/OmniRoute.git
+
+jobs:
+  sync:
+    name: Merge upstream into tier branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tier branch (full history for the merge)
+        uses: actions/checkout@v7
+        with:
+          ref: feat/ghcr-tier-images
+          fetch-depth: 0
+
+      - name: Resolve upstream branch
+        id: upstream
+        run: |
+          set -euo pipefail
+          git remote add upstream "$UPSTREAM_REPO"
+          git fetch upstream --no-tags
+          BR="${{ inputs.upstream_branch }}"
+          if [ -z "$BR" ]; then
+            # Highest release/vX.Y.Z by version sort — matches the project's
+            # active-development-branch convention (AGENTS.md Hard Rule #21).
+            BR=$(git branch -r --format='%(refname:short)' \
+              | grep -E '^upstream/release/v[0-9]' \
+              | sed 's/^upstream\///' | sort -V | tail -n 1)
+          fi
+          if [ -z "$BR" ]; then
+            echo "No upstream release/v* branch found" >&2
+            exit 1
+          fi
+          echo "branch=$BR" >> "$GITHUB_OUTPUT"
+          echo "Merging upstream/$BR"
+
+      - name: Merge upstream
+        id: merge
+        env:
+          UPSTREAM_BRANCH: ${{ steps.upstream.outputs.branch }}
+        run: |
+          set -euo pipefail
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+
+          if git merge --no-edit "upstream/${UPSTREAM_BRANCH}"; then
+            if git diff --quiet HEAD "origin/${TIER_BRANCH}"; then
+              echo "changed=false" >> "$GITHUB_OUTPUT"
+              echo "Already up to date with upstream/${UPSTREAM_BRANCH}."
+            else
+              git push origin "HEAD:${TIER_BRANCH}"
+              echo "changed=true" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            # Merge failed: record the conflicted files for the issue, then
+            # leave the tree conflicted (the next step reads the same list).
+            echo "changed=conflict" >> "$GITHUB_OUTPUT"
+            git diff --name-only --diff-filter=U || true
+          fi
+
+      - name: Open issue on merge conflict
+        if: steps.merge.outputs.changed == 'conflict'
+        env:
+          UPSTREAM_BRANCH: ${{ steps.upstream.outputs.branch }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          CONFLICTED=$(git diff --name-only --diff-filter=U | paste -sd ' ' - || true)
+          gh issue create \
+            --title "ghcr-tier-sync: conflict merging upstream/${UPSTREAM_BRANCH}" \
+            --body "The upstream sync could not merge \`upstream/${UPSTREAM_BRANCH}\` into \`${TIER_BRANCH}\` automatically.
+
+          Conflicted files: \`${CONFLICTED:-unknown}\`
+
+          Resolve locally, then push (pushing triggers the tier-image build):
+          \`\`\`bash
+          git fetch upstream
+          git checkout ${TIER_BRANCH}
+          git merge upstream/${UPSTREAM_BRANCH}
+          # resolve conflicts, commit, then:
+          git push origin ${TIER_BRANCH}
+          \`\`\`"
+
+      - name: Dispatch tier-image build
+        if: steps.merge.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # A GITHUB_TOKEN push does not re-trigger push workflows; dispatch
+          # the build explicitly (workflow_dispatch is the documented
+          # exception to that rule).
+          gh workflow run ghcr-tier-images.yml --ref "$TIER_BRANCH"
+          echo "Tier-image build dispatched."

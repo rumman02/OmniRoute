@@ -26,15 +26,58 @@ Multi-arch: `linux/amd64` + `linux/arm64`.
 
 ## Usage
 
+The package is public — no `docker login` needed anywhere:
+
 ```bash
 docker pull ghcr.io/rumman02/omniroute:web-cli
 docker run -p 20128:20128 -v ./data:/app/data ghcr.io/rumman02/omniroute:web-cli
 ```
 
+### Environment variables
+
+The only **required** env setup is secrets on first boot — everything else has
+sane defaults. Minimal `.env`:
+
+```bash
+JWT_SECRET=<openssl rand -base64 48>
+API_KEY_SECRET=<openssl rand -hex 32>
+INITIAL_PASSWORD=<your dashboard password — set this FIRST boot, rotate after login>
+STORAGE_ENCRYPTION_KEY=<openssl rand -hex 32>
+```
+
+The useful runtime knobs (all optional):
+
+| Env var | Default | Notes |
+| --- | --- | --- |
+| `DATA_DIR` | `/app/data` | **Mount a volume here** or your data vanishes with the container. |
+| `PORT` | `20128` | Dashboard + API on one port. |
+| `OMNIROUTE_MEMORY_MB` | `1024` | Runtime heap. Raise to `2048` for big fusion panels. |
+| `REQUIRE_API_KEY` | `false` | Set `true` when exposing beyond localhost. |
+| `REDIS_URL` | `redis://redis:6379` | Only when running the compose stack. |
+| `OMNIROLE` (full tier only) | `omniroute` | `codex-app-server` switches the container to the sidecar role. |
+| `CLI_MODE` (web-cli-host tier) | `host` (baked) | Override to `auto`/`container` to use the baked-in CLIs instead. |
+
+### Which tag for which job
+
+| You want | Tag | Extra env / mounts |
+| --- | --- | --- |
+| Plain proxy, any API-key/OAuth provider | `:base` / `:latest` | none |
+| Web-cookie providers (gemini-web, claude-web, claude-turnstile) | `:web` / `:latest-web` | none — Chromium is baked in; add the `chatgpt-web-codex-browser` sidecar for ChatGPT Web (Codex) |
+| Agentic workflows — Codex/Claude Code/droid/openclaw CLIs usable from inside the dashboard | `:web-cli` / `:latest-web-cli` | mount `-v /var/run/docker.sock:/var/run/docker.sock` if the CLIs need Docker |
+| Your host's own CLI binaries + configs (host mode) | `:web-cli-host` / `:latest-web-cli-host` | mount `~/.codex`, `~/.claude`, `~/.local/bin`, … at the `/host-*` paths (see compose comments) |
+| Everything incl. the codex-app-server sidecar role | `:full` / `:latest-full` | sidecar: `-e OMNIROLE=codex-app-server` + token/`~/.codex` volumes |
+| ChatGPT Web (Codex) Chromium CDP sidecar | `:chatgpt-web-codex-browser` / `:latest-chatgpt-web-codex-browser` | `shm_size: 2gb`; app needs `CHATGPT_WEB_CODEX_CDP_URL=http://<sidecar>:9223` |
+| Pin an exact build | `:3.8.51` … `:3.8.51-full` | none — immutable per version |
+
+Bare `:latest` and `:3.8.51` are the **base** flavor (upstream convention);
+flavored tags carry the suffix (`:latest-web-cli`, `:3.8.51-web-cli`).
+
+### Compose (no local build)
+
 Or with the compose file that consumes these images (no `build:` anywhere):
 
 ```bash
-cp .env.example .env
+cp .env.example .env   # fill the 4 secrets above
 docker compose -f docker-compose.ghcr.yml up -d                                # base
 OMNIROUTE_TIER=web-cli docker compose -f docker-compose.ghcr.yml up -d        # tier select
 OMNIROUTE_TIER=full docker compose -f docker-compose.ghcr.yml \
@@ -69,9 +112,42 @@ This also fixes the gap in the upstream compose file, whose
 contain the `codex` binary (it is installed only in the unpublished
 `runner-cli` stage). The `full`/`web-cli` tiers contain it.
 
+## Keeping the images current
+
+Two layers, both automated:
+
+1. **Sync from upstream** — `.github/workflows/ghcr-tier-sync.yml` runs weekly
+   (Mondays ~04:23 UTC) and on demand: it merges the highest upstream
+   `diegosouzapw/OmniRoute` `release/v*` branch into `feat/ghcr-tier-images`,
+   pushes, and dispatches a fresh tier-image build. A merge conflict opens an
+   issue with the file list instead of failing silently — resolve locally once
+   and push. Manual equivalent:
+
+   ```bash
+   git remote add upstream https://github.com/diegosouzapw/OmniRoute.git  # once
+   git fetch upstream
+   git checkout feat/ghcr-tier-images
+   git merge upstream/release/v3.8.51   # or the newest release/v*
+   git push                              # triggers the tier build automatically
+   ```
+
+2. **Rebuild the images** — any push to `feat/ghcr-tier-images` (or a manual
+   dispatch from the Actions tab) re-runs `ghcr-tier-images.yml` and republishes
+   every tier with fresh `latest-*` and new `<version>-*` tags. Update your
+   deployment with:
+
+   ```bash
+   docker compose -f docker-compose.ghcr.yml pull && \
+   OMNIROUTE_TIER=web-cli docker compose -f docker-compose.ghcr.yml up -d
+   ```
+
+   Versioned tags (`:3.8.51-web-cli`) never move — pin them for reproducible
+   deploys.
+
 ## Visibility
 
-GHCR packages inherit private visibility by default. For passwordless
-`docker pull` anywhere, flip the package to public once:
-repo → *Packages* → `omniroute` → *Package settings* → *Danger Zone* →
-*Change visibility* → Public.
+The package is **public** (set 2026-08-27) — `docker pull
+ghcr.io/rumman02/omniroute:<tag>` works from any machine with no login. If it
+ever needs to go private: repo → *Packages* → `omniroute` → *Package settings* →
+*Danger Zone* → *Change visibility* — then every host needs
+`docker login ghcr.io` with a PAT that has `read:packages`.
