@@ -12,6 +12,11 @@
 #                  see the volumes block below; without the mounts the baked-in
 #                  CLIs are still used, the host lookup just misses)
 #    full          +codex-app-server role entrypoint (OMNIROLE, see below)
+#    full-browser  +the chatgpt-web-codex browser EMBEDDED in the same container
+#                  (app + cdp-proxy + headless Chromium; no web-cookie sidecar
+#                  needed — the entrypoint launches the browser and points the
+#                  app at 127.0.0.1:9223. Mount /browser-profile to keep the
+#                  login session, see the commented volume on the app service)
 #
 #  Usage:
 #    cp .env.example .env   # then edit your secrets
@@ -27,6 +32,11 @@
 #
 #  `full` can also run the sidecar role directly (no separate service):
 #    docker run -e OMNIROLE=codex-app-server ghcr.io/rumman02/omniroute:full
+#
+#  With OMNIROUTE_TIER=full-browser neither sidecar is required: the embedded
+#  browser wins over the compose CHATGPT_WEB_CODEX_CDP_URL default above. To
+#  run the external sidecar instead of the embedded one, keep the web-cookie
+#  profile and set CHATGPT_WEB_CODEX_EMBEDDED_BROWSER=0.
 # ──────────────────────────────────────────────────────────────────────
 
 x-common: &common
@@ -49,7 +59,8 @@ x-common: &common
     - OMNIROUTE_CODEX_APPSERVER_WS=${OMNIROUTE_CODEX_APPSERVER_WS:-ws://codex-app-server:1456}
     - OMNIROUTE_CODEX_APPSERVER_WS_TOKEN_FILE=${OMNIROUTE_CODEX_APPSERVER_WS_TOKEN_FILE:-/run/codex-appserver/token}
     # Internal Chromium sidecar for ChatGPT Web (Codex) — used by the `web`
-    # tiers together with the `web-cookie` profile.
+    # tiers together with the `web-cookie` profile. The `full-browser` tier
+    # overrides this at runtime (embedded browser on 127.0.0.1:9223).
     - CHATGPT_WEB_CODEX_CDP_URL=${CHATGPT_WEB_CODEX_CDP_URL:-http://chatgpt-web-codex-browser:9223}
   volumes:
     - ./data:/app/data
@@ -92,6 +103,15 @@ services:
       - "${DASHBOARD_PORT:-20128}:${DASHBOARD_PORT:-20128}"
       - "${API_PORT:-20129}:${API_PORT:-20129}"
       - "${LIVE_WS_PORT:-20132}:${LIVE_WS_PORT:-20132}"
+    # ── full-browser tier: persist the embedded browser's login session ──
+    # Uncomment when OMNIROUTE_TIER=full-browser. NOTE: a `volumes:` block on
+    # this service REPLACES the x-common volumes — keep ./data and the codex
+    # mounts listed (same caveat as the host-mode block below).
+    # volumes:
+    #   - ./data:/app/data
+    #   - codex-appserver-token:/run/codex-appserver
+    #   - codex-appserver-home:/home/node/.codex
+    #   - chatgpt-web-codex-browser-data:/browser-profile
     # ── Host-mode mounts (web-cli-host tier) ──
     # Only needed when OMNIROUTE_TIER=web-cli-host. Adjust the paths to YOUR
     # host system (mirrors the `host` profile of docker-compose.yml):

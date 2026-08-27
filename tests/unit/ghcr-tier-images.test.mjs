@@ -29,6 +29,15 @@ describe("GHCR tier images — Dockerfile stage chain", () => {
     assert.match(dockerfile, /^FROM runner-web-cli-host AS runner-full$/m);
   });
 
+  it("runner-full-browser builds on runner-full (cumulative last tier)", () => {
+    assert.match(dockerfile, /^FROM runner-full AS runner-full-browser$/m);
+    // The embedded browser tier ships the sidecar's cdp-proxy and a profile
+    // dir, and enables the launch flag by default.
+    assert.match(dockerfile, /COPY docker\/chatgpt-web-codex-browser\/cdp-proxy\.mjs \/app\/cdp-proxy\.mjs/m);
+    assert.match(dockerfile, /mkdir -p \/browser-profile/m);
+    assert.match(dockerfile, /^ENV CHATGPT_WEB_CODEX_EMBEDDED_BROWSER=1$/m);
+  });
+
   it("the host tier bakes the same env defaults as the compose host profile", () => {
     // Mirrors docker-compose.yml's `host` profile environment block.
     // assert.ok(boolean), not assert.match — a failing assert.match dumps the
@@ -88,16 +97,39 @@ describe("GHCR tier images — role entrypoint", () => {
     assert.match(entrypoint, /randomBytes\(32\)/);
     assert.match(entrypoint, /\/dev\/urandom/);
   });
+
+  it("embedded browser launch mirrors the sidecar command and defaults the CDP URL to loopback", () => {
+    // Gated on the full-browser tier's baked flag.
+    assert.match(entrypoint, /CHATGPT_WEB_CODEX_EMBEDDED_BROWSER:-0/);
+    // Same launch flags as docker/chatgpt-web-codex-browser/Dockerfile's CMD.
+    assert.match(entrypoint, /--headless=new --no-sandbox --disable-dev-shm-usage/);
+    assert.match(entrypoint, /--remote-debugging-port=9222/);
+    assert.match(entrypoint, /--user-data-dir=\/browser-profile/);
+    assert.match(entrypoint, /node \/app\/cdp-proxy\.mjs &/);
+    // App must reach the browser through the proxy on loopback. Both compose
+    // files bake CHATGPT_WEB_CODEX_CDP_URL=http://chatgpt-web-codex-browser:9223
+    // into the env for every tier, so a plain ${VAR:-default} would never fire
+    // under compose and the app would keep aiming at a sidecar that only
+    // exists under the web-cookie profile — the compose default must be
+    // treated as unset when the embedded browser is up, while any other
+    // operator-provided URL (e.g. a remote browser) still wins.
+    assert.match(
+      entrypoint,
+      /\$CHATGPT_WEB_CODEX_CDP_URL" = "http:\/\/chatgpt-web-codex-browser:9223"/
+    );
+    assert.match(entrypoint, /export CHATGPT_WEB_CODEX_CDP_URL="http:\/\/127\.0\.0\.1:9223"/);
+  });
 });
 
 describe("GHCR tier images — workflow and compose wiring", () => {
-  it("workflow builds all five tier targets + the browser sidecar", () => {
+  it("workflow builds all six tier targets + the browser sidecar", () => {
     for (const target of [
       "runner-base",
       "runner-web",
       "runner-web-cli",
       "runner-web-cli-host",
       "runner-full",
+      "runner-full-browser",
     ]) {
       assert.ok(workflow.includes(`target: ${target}`), `workflow must build ${target}`);
     }

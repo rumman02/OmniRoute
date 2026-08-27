@@ -8,6 +8,7 @@ name: Publish tier images to GHCR (fork)
 #   :web-cli         → runner-web-cli             (base + web + cli)
 #   :web-cli-host    → runner-web-cli-host        (base + web + cli + host)
 #   :full            → runner-full                (… + codex-app-server role)
+#   :full-browser    → runner-full-browser        (… + embedded chatgpt-web-codex browser)
 #   :chatgpt-web-codex-browser → docker/chatgpt-web-codex-browser/Dockerfile
 #
 # Tags per tier: the mutable tier name, the `latest-<tier>` channel (upstream
@@ -168,6 +169,22 @@ jobs:
         env:
           DOCKER_BUILDKIT_INLINE_CACHE: 1
 
+      - name: Build and push FULL-BROWSER platform image by digest
+        id: build-full-browser
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: runner-full-browser
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+          tags: ${{ env.GHCR_IMAGE }}
+          build-args: |
+            OMNIROUTE_BUILD_WORKERS=2
+          cache-from: type=gha,scope=ghcr-tiers-${{ matrix.arch }}
+          cache-to: type=gha,scope=ghcr-tiers-${{ matrix.arch }},mode=max
+        env:
+          DOCKER_BUILDKIT_INLINE_CACHE: 1
+
       - name: Build and push BROWSER SIDECAR platform image by digest
         id: build-browser
         uses: docker/build-push-action@v7
@@ -189,16 +206,19 @@ jobs:
           DIGEST_WEB_CLI: ${{ steps.build-web-cli.outputs.digest }}
           DIGEST_WEB_CLI_HOST: ${{ steps.build-web-cli-host.outputs.digest }}
           DIGEST_FULL: ${{ steps.build-full.outputs.digest }}
+          DIGEST_FULL_BROWSER: ${{ steps.build-full-browser.outputs.digest }}
           DIGEST_BROWSER: ${{ steps.build-browser.outputs.digest }}
         run: |
           set -euo pipefail
           mkdir -p /tmp/digests/base /tmp/digests/web /tmp/digests/web-cli \
-            /tmp/digests/web-cli-host /tmp/digests/full /tmp/digests/chatgpt-web-codex-browser
+            /tmp/digests/web-cli-host /tmp/digests/full /tmp/digests/full-browser \
+            /tmp/digests/chatgpt-web-codex-browser
           touch "/tmp/digests/base/${DIGEST_BASE#sha256:}"
           touch "/tmp/digests/web/${DIGEST_WEB#sha256:}"
           touch "/tmp/digests/web-cli/${DIGEST_WEB_CLI#sha256:}"
           touch "/tmp/digests/web-cli-host/${DIGEST_WEB_CLI_HOST#sha256:}"
           touch "/tmp/digests/full/${DIGEST_FULL#sha256:}"
+          touch "/tmp/digests/full-browser/${DIGEST_FULL_BROWSER#sha256:}"
           touch "/tmp/digests/chatgpt-web-codex-browser/${DIGEST_BROWSER#sha256:}"
 
       - name: Upload digests
@@ -288,6 +308,7 @@ jobs:
           create_manifest web-cli
           create_manifest web-cli-host
           create_manifest full
+          create_manifest full-browser
           create_manifest chatgpt-web-codex-browser
 
       - name: Inspect images
