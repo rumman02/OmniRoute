@@ -17,6 +17,7 @@ Each tier contains everything the tier above it has:
 | `web-cli`                 | `runner-web-cli`     | +`git`, `docker.io`, `docker-compose` and global CLIs: `@openai/codex`, `@anthropic-ai/claude-code`, `droid`, `openclaw` |
 | `web-cli-host`            | `runner-web-cli-host`| +host-mode defaults (`CLI_MODE=host`, `/host-*` lookup paths) — see below  |
 | `full`                    | `runner-full`        | +`OMNIROLE` entrypoint that can also run as the codex-app-server sidecar   |
+| `full-browser`            | `runner-full-browser`| +embedded chatgpt-web-codex Chromium (the sidecar baked in) — see below    |
 | `chatgpt-web-codex-browser` | sidecar Dockerfile | Chromium + CDP proxy for ChatGPT Web (Codex).                             |
 
 Tags per tier: the mutable tier name (`:web-cli`), the `latest-<tier>` channel
@@ -63,8 +64,9 @@ The useful runtime knobs (all optional):
 | `OMNIROUTE_MEMORY_MB` | `1024` | Runtime heap. Raise to `2048` for big fusion panels. |
 | `REQUIRE_API_KEY` | `false` | Set `true` when exposing beyond localhost. |
 | `REDIS_URL` | `redis://redis:6379` | Only when running the compose stack. |
-| `OMNIROLE` (full tier only) | `omniroute` | `codex-app-server` switches the container to the sidecar role. |
+| `OMNIROLE` (full/full-browser tiers) | `omniroute` | `codex-app-server` switches the container to the sidecar role. |
 | `CLI_MODE` (web-cli-host tier) | `host` (baked) | Override to `auto`/`container` to use the baked-in CLIs instead. |
+| `CHATGPT_WEB_CODEX_EMBEDDED_BROWSER` (full-browser tier) | `1` (baked) | `0` disables the embedded browser — app only, or point `CHATGPT_WEB_CODEX_CDP_URL` at the external sidecar. |
 
 ### Which tag for which job
 
@@ -75,8 +77,9 @@ The useful runtime knobs (all optional):
 | Agentic workflows — Codex/Claude Code/droid/openclaw CLIs usable from inside the dashboard | `:web-cli` / `:latest-web-cli` | mount `-v /var/run/docker.sock:/var/run/docker.sock` if the CLIs need Docker |
 | Your host's own CLI binaries + configs (host mode) | `:web-cli-host` / `:latest-web-cli-host` | mount `~/.codex`, `~/.claude`, `~/.local/bin`, … at the `/host-*` paths (see compose comments) |
 | Everything incl. the codex-app-server sidecar role | `:full` / `:latest-full` | sidecar: `-e OMNIROLE=codex-app-server` + token/`~/.codex` volumes |
+| All of the above AND the ChatGPT Web (Codex) browser in the SAME container | `:full-browser` / `:latest-full-browser` | none — cdp-proxy + Chromium launch automatically on `127.0.0.1:9223`; mount `-v …:/browser-profile` to keep the login session; disable with `-e CHATGPT_WEB_CODEX_EMBEDDED_BROWSER=0` |
 | ChatGPT Web (Codex) Chromium CDP sidecar | `:chatgpt-web-codex-browser` / `:latest-chatgpt-web-codex-browser` | `shm_size: 2gb`; app needs `CHATGPT_WEB_CODEX_CDP_URL=http://<sidecar>:9223` |
-| Pin an exact build | `:3.8.51` … `:3.8.51-full` | none — immutable per version |
+| Pin an exact build | `:3.8.51` … `:3.8.51-full-browser` | none — immutable per version |
 
 Bare `:latest` and `:3.8.51` are the **base** flavor (upstream convention);
 flavored tags carry the suffix (`:latest-web-cli`, `:3.8.51-web-cli`).
@@ -120,6 +123,30 @@ This also fixes the gap in the upstream compose file, whose
 `codex-app-server` sidecar uses `omniroute:base` — an image that does **not**
 contain the `codex` binary (it is installed only in the unpublished
 `runner-cli` stage). The `full`/`web-cli` tiers contain it.
+
+## The embedded browser tier (`full-browser` only)
+
+`full-browser` bakes the entire `chatgpt-web-codex-browser` sidecar into the
+image: the same `cdp-proxy.mjs` + headless Chromium pair, launched as
+background children by the role entrypoint (`CHATGPT_WEB_CODEX_EMBEDDED_BROWSER=1`
+is the tier default), with the app pointed at `http://127.0.0.1:9223`. One
+container, zero extra services — good for laptops and single-container hosts.
+
+The trade-off vs the sidecar: app and browser now share a container, so a
+Chromium crash takes the whole container down (restart to recover) and shares
+the app's memory ceiling. For production, the `web-cookie` sidecar profile
+remains the more robust layout. Mount a volume at `/browser-profile` to keep
+the ChatGPT login session across restarts.
+
+**CDP URL precedence.** Both compose files bake
+`CHATGPT_WEB_CODEX_CDP_URL=http://chatgpt-web-codex-browser:9223` into the app
+environment for every tier (it is what makes the `web-cookie` sidecar work
+zero-config on the other tiers). The entrypoint treats that compose default as
+*unset* when the embedded browser is up, so `full-browser` still lands on
+`http://127.0.0.1:9223` under compose — the embedded browser wins. Any other
+explicitly-set URL (e.g. a remote browser) is respected as-is. To run the
+external `web-cookie` sidecar instead of the embedded browser, keep the profile
+and set `-e CHATGPT_WEB_CODEX_EMBEDDED_BROWSER=0`.
 
 ## Keeping the images current
 

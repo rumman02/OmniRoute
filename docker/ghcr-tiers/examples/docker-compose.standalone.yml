@@ -9,10 +9,15 @@
 #  and persisted to the data volume — you only need INITIAL_PASSWORD if you
 #  want a known dashboard password from the start.
 #
-#  Pick the image tier via OMNIROUTE_TIER (base|web|web-cli|web-cli-host|full):
+#  Pick the image tier via OMNIROUTE_TIER
+#  (base|web|web-cli|web-cli-host|full|full-browser):
 #
 #    docker compose -f docker-compose.standalone.yml up -d
 #    OMNIROUTE_TIER=web-cli docker compose -f docker-compose.standalone.yml up -d
+#
+#  full-browser embeds the chatgpt-web-codex browser IN the app container
+#  (app + cdp-proxy + headless Chromium, no web-cookie sidecar needed): the
+#  entrypoint launches the browser and points the app at 127.0.0.1:9223.
 #
 #  Optional sidecars (compose profiles):
 #    --profile web-cookie        Chromium CDP sidecar for ChatGPT Web (Codex)
@@ -53,6 +58,8 @@ services:
       - OMNIROUTE_CODEX_APPSERVER_WS=ws://codex-app-server:1456
       - OMNIROUTE_CODEX_APPSERVER_WS_TOKEN_FILE=/run/codex-appserver/token
       # ChatGPT Web (Codex) Chromium sidecar — inert unless web-cookie is up.
+      # (The full-browser tier replaces this at runtime with its embedded
+      # browser on 127.0.0.1:9223.)
       - CHATGPT_WEB_CODEX_CDP_URL=http://chatgpt-web-codex-browser:9223
     ports:
       - "${DASHBOARD_PORT:-20128}:${PORT:-20128}"
@@ -63,6 +70,9 @@ services:
       # Shared with the codex-app-server profile sidecars below.
       - codex-appserver-token:/run/codex-appserver
       - codex-appserver-home:/home/node/.codex
+      # full-browser tier: uncomment to persist the embedded browser's
+      # ChatGPT Web login session across restarts.
+      # - chatgpt-web-codex-browser-data:/browser-profile
     depends_on:
       redis:
         condition: service_healthy

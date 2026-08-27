@@ -403,3 +403,33 @@ ENTRYPOINT ["/app/entrypoint.sh"]
 # re-declared — without it the entrypoint's `exec "$@"` runs with no args and
 # the container exits 0 immediately (found running latest-full locally).
 CMD ["node", "dev/run-standalone.mjs"]
+
+# ── Runner Full+Browser (… + embedded chatgpt-web-codex Chromium) ───────────
+#
+# Everything the chatgpt-web-codex-browser sidecar is, baked into the image:
+# the same cdp-proxy.mjs and a persistent /browser-profile, launched in the
+# background by the role entrypoint (CHATGPT_WEB_CODEX_EMBEDDED_BROWSER=1).
+# The app then reaches the browser at http://127.0.0.1:9223 — no
+# `web-cookie` compose profile / second container needed.
+#
+# Trade-off vs the sidecar: one container now hosts app + browser, so a
+# Chromium crash takes the whole container down (restart required), and the
+# browser shares the app's memory ceiling. The sidecar remains the
+# production-grade layout; this tier is the single-container convenience.
+FROM runner-full AS runner-full-browser
+
+USER root
+
+# Same proxy the sidecar image ships: listens on 9223, fronts Chromium's
+# 9222, rewrites Host/websocket URLs so the CDP client works cross-host.
+COPY docker/chatgpt-web-codex-browser/cdp-proxy.mjs /app/cdp-proxy.mjs
+
+# Persistent browser profile (login session) — mount a volume here to keep
+# the ChatGPT session across container restarts.
+RUN mkdir -p /browser-profile && chown -R node:node /browser-profile
+
+USER node
+
+# On by default for this tier; the entrypoint only launches the browser when
+# this is set AND a Chromium is present. Override with -e to run app-only.
+ENV CHATGPT_WEB_CODEX_EMBEDDED_BROWSER=1

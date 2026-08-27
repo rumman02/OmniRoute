@@ -28,4 +28,33 @@ if [ "$ROLE" = "codex-app-server" ]; then
     --ws-token-file "$TOKEN_FILE"
 fi
 
+# Embedded chatgpt-web-codex browser (full-browser tier): run the same
+# cdp-proxy + headless Chromium pair the compose sidecar runs, as background
+# children of this container, and point the app at it on loopback. No-op in
+# every other tier (flag unset) and when no Chromium is present.
+if [ "${CHATGPT_WEB_CODEX_EMBEDDED_BROWSER:-0}" = "1" ]; then
+  CHROME_BIN=$(find "${PLAYWRIGHT_BROWSERS_PATH:-/home/node/.cache/ms-playwright}" \
+    -path '*/chrome-linux/chrome' -type f 2>/dev/null | head -n 1)
+  if [ -n "$CHROME_BIN" ] && [ -f /app/cdp-proxy.mjs ]; then
+    node /app/cdp-proxy.mjs &
+    "$CHROME_BIN" --headless=new --no-sandbox --disable-dev-shm-usage \
+      --remote-debugging-port=9222 --user-data-dir=/browser-profile about:blank &
+    # Point the app at the in-container proxy unless it is explicitly aimed
+    # elsewhere. Both compose files bake the sidecar hostname
+    # (http://chatgpt-web-codex-browser:9223) into the env for EVERY tier, so
+    # a plain ${VAR:-default} would keep pointing at a sidecar that only
+    # exists under the web-cookie profile — treat that compose default as
+    # unset here. With the embedded browser up, the browser in this container
+    # is the one that matters; to prefer the external sidecar instead, run
+    # with CHATGPT_WEB_CODEX_EMBEDDED_BROWSER=0.
+    if [ -z "${CHATGPT_WEB_CODEX_CDP_URL:-}" ] \
+      || [ "$CHATGPT_WEB_CODEX_CDP_URL" = "http://chatgpt-web-codex-browser:9223" ]; then
+      export CHATGPT_WEB_CODEX_CDP_URL="http://127.0.0.1:9223"
+    fi
+    echo "[entrypoint] embedded chatgpt-web-codex browser up (CDP: 127.0.0.1:9223)"
+  else
+    echo "[entrypoint] WARNING: CHATGPT_WEB_CODEX_EMBEDDED_BROWSER=1 but no Chromium/cdp-proxy present — app only" >&2
+  fi
+fi
+
 exec /app/check-permissions.sh "$@"
