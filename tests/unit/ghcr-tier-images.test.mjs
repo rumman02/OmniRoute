@@ -134,3 +134,24 @@ describe("GHCR tier images — workflow and compose wiring", () => {
     assert.doesNotMatch(compose, /^\s{2,}build:/m);
   });
 });
+
+describe("GHCR tier images — upstream sync workflow", () => {
+  const read = (p) => readFileSync(fileURLToPath(new URL(p, repoRoot)), "utf8");
+  const syncWf = read(".github/workflows/ghcr-tier-sync.yml");
+
+  it("exists, merges upstream diegosouzapw/OmniRoute into the tier branch", () => {
+    assert.ok(existsSync(fileURLToPath(new URL(".github/workflows/ghcr-tier-sync.yml", repoRoot))));
+    assert.ok(syncWf.includes("https://github.com/diegosouzapw/OmniRoute.git"));
+    assert.ok(syncWf.includes("TIER_BRANCH: feat/ghcr-tier-images"));
+    assert.match(syncWf, /git merge --no-edit/);
+  });
+
+  it("dispatches the tier build explicitly (GITHUB_TOKEN pushes don't trigger push-workflows)", () => {
+    assert.match(syncWf, /gh workflow run ghcr-tier-images\.yml --ref "\$TIER_BRANCH"/);
+  });
+
+  it("opens an issue instead of failing silently on a merge conflict", () => {
+    assert.match(syncWf, /changed == 'conflict'/);
+    assert.match(syncWf, /gh issue create/);
+  });
+});
