@@ -64,6 +64,16 @@ describe("GHCR tier images — role entrypoint", () => {
     assert.match(dockerfile, /^ENTRYPOINT \["\/app\/entrypoint\.sh"\]$/m);
   });
 
+  it("runner-full re-declares CMD — ENTRYPOINT resets the inherited CMD to empty", () => {
+    // Dockerfile semantics: declaring ENTRYPOINT clears CMD inherited from the
+    // base stage. Without this re-declaration the entrypoint's `exec "$@"` runs
+    // with no args and the container exits 0 immediately (verified on the
+    // published latest-full: Cmd was null).
+    const entrypointIdx = dockerfile.indexOf('ENTRYPOINT ["/app/entrypoint.sh"]');
+    const cmdIdx = dockerfile.indexOf('CMD ["node", "dev/run-standalone.mjs"]', entrypointIdx);
+    assert.ok(entrypointIdx > -1 && cmdIdx > entrypointIdx, "CMD must follow the role ENTRYPOINT");
+  });
+
   it("delegates the default role to check-permissions.sh", () => {
     assert.match(entrypoint, /exec \/app\/check-permissions\.sh "\$@"/);
   });
