@@ -19,9 +19,10 @@ Each tier contains everything the tier above it has:
 | `full`                    | `runner-full`        | +`OMNIROLE` entrypoint that can also run as the codex-app-server sidecar   |
 | `chatgpt-web-codex-browser` | sidecar Dockerfile | Chromium + CDP proxy for ChatGPT Web (Codex).                             |
 
-Tags per tier: the mutable tier name (`:web-cli`), the version at build time
-(`:3.8.51-web-cli`), and `:latest` (alias of `base`). Multi-arch:
-`linux/amd64` + `linux/arm64`.
+Tags per tier: the mutable tier name (`:web-cli`), the `latest-<tier>` channel
+(`:latest-web-cli` — upstream convention, bare `:latest` is the base flavor),
+and the version at build time (`:3.8.51-web-cli`, bare `:3.8.51` is base).
+Multi-arch: `linux/amd64` + `linux/arm64`.
 
 ## Usage
 

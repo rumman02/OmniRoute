@@ -103,6 +103,21 @@ describe("GHCR tier images — workflow and compose wiring", () => {
     assert.ok(compose.includes(`image: ${image}:`));
   });
 
+  it("tags every tier with a latest-<tier> channel; bare latest/version are base-only", () => {
+    // Upstream convention: diegosouzapw/omniroute:latest == base flavor, and
+    // flavored images get the -<flavor> suffix (latest-web, 3.8.51-web).
+    assert.ok(
+      /tags\+=\(-t "\$\{GHCR_IMAGE\}:latest-\$\{tier\}"\)/.test(workflow),
+      "non-base tiers must publish a latest-<tier> tag"
+    );
+    assert.match(workflow, /tags\+=\(-t "\$\{GHCR_IMAGE\}:latest"\)/);
+    // The bare :latest and :<version> aliases are inside the base branch only —
+    // assert they appear after the base check, alongside each other.
+    const latestIdx = workflow.indexOf('tags+=(-t "${GHCR_IMAGE}:latest")');
+    const versionIdx = workflow.indexOf('tags+=(-t "${GHCR_IMAGE}:${VERSION}")');
+    assert.ok(latestIdx > -1 && versionIdx > latestIdx, "bare version tag follows the bare latest tag in the base branch");
+  });
+
   it("compose selects the tier via OMNIROUTE_TIER with base as default", () => {
     assert.match(compose, /image: ghcr\.io\/rumman02\/omniroute:\$\{OMNIROUTE_TIER:-base\}/);
   });

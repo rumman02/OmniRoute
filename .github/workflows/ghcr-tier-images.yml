@@ -10,8 +10,9 @@ name: Publish tier images to GHCR (fork)
 #   :full            → runner-full                (… + codex-app-server role)
 #   :chatgpt-web-codex-browser → docker/chatgpt-web-codex-browser/Dockerfile
 #
-# Tags per tier: the mutable tier name, plus (on release branches) the
-# package.json version (e.g. 3.8.51-web-cli) and `latest` on the base tier.
+# Tags per tier: the mutable tier name, the `latest-<tier>` channel (upstream
+# convention — bare `:latest` is the base flavor, like diegosouzapw/omniroute),
+# and the package.json version (e.g. 3.8.51-web-cli; bare `:3.8.51` is base).
 # Pattern follows .github/workflows/docker-publish.yml (digest build per arch →
 # imagetools manifest merge), minus the Docker Hub half and the release
 # machinery — this fork publishes to GHCR only.
@@ -260,7 +261,14 @@ jobs:
               tags+=(-t "${GHCR_IMAGE}:${VERSION}-${tier}")
             fi
             if [ "$tier" = "base" ]; then
+              # Bare `latest`/`<version>` ARE the base flavor (upstream
+              # convention: diegosouzapw/omniroute:latest == base).
               tags+=(-t "${GHCR_IMAGE}:latest")
+              if [ -n "$VERSION" ]; then
+                tags+=(-t "${GHCR_IMAGE}:${VERSION}")
+              fi
+            else
+              tags+=(-t "${GHCR_IMAGE}:latest-${tier}")
             fi
             local refs=()
             while IFS= read -r digest_file; do
