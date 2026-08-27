@@ -15,6 +15,10 @@
 #    docker compose -f docker-compose.standalone.yml up -d
 #    OMNIROUTE_TIER=web-cli docker compose -f docker-compose.standalone.yml up -d
 #
+#  Default-file mode: save this file as `compose.yaml` on the host and put
+#  OMNIROUTE_TIER=<tier> in a `.env` beside it — Compose auto-discovers both,
+#  so a plain `docker compose up -d` runs the chosen tier.
+#
 #  full-browser embeds the chatgpt-web-codex browser IN the app container
 #  (app + cdp-proxy + headless Chromium, no web-cookie sidecar needed): the
 #  entrypoint launches the browser and points the app at 127.0.0.1:9223.

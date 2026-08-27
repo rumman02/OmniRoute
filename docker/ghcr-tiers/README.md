@@ -96,6 +96,20 @@ OMNIROUTE_TIER=full docker compose -f docker-compose.ghcr.yml \
   --profile codex-app-server up -d                                            # + app-server sidecar
 ```
 
+To run it as a host's **default compose file** — no `-f`, no shell env var, just
+`docker compose up -d`: copy the standalone example to `compose.yaml` (Compose's
+default lookup name) and set the tier in a `.env` file beside it. Compose
+auto-reads `.env` for variable interpolation, so `OMNIROUTE_TIER` there selects
+the image tag without a command-line prefix (note: on a deployment host — inside
+the repo checkout, `docker compose up` would find the build-based
+`docker-compose.yml` instead):
+
+```bash
+cp docker/ghcr-tiers/examples/docker-compose.standalone.yml compose.yaml
+echo "OMNIROUTE_TIER=full-browser" >> .env      # plus the secrets, first boot
+docker compose up -d
+```
+
 ### What differs between tiers at runtime
 
 Nothing in the compose service definition — every tier takes the same env
