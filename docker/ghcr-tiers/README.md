@@ -209,16 +209,51 @@ Two layers, both automated:
 
 2. **Rebuild the images** — any push to `feat/ghcr-tier-images` (or a manual
    dispatch from the Actions tab) re-runs `ghcr-tier-images.yml` and republishes
-   every tier with fresh `latest-*` and new `<version>-*` tags. Update your
-   deployment with:
+   every tier with fresh `latest-*` and `<version>-*` tags.
 
-   ```bash
-   docker compose -f docker-compose.ghcr.yml pull && \
-   OMNIROUTE_TIER=web-cli docker compose -f docker-compose.ghcr.yml up -d
-   ```
+### Updating a running deployment
 
-   Versioned tags (`:3.8.51-web-cli`) never move — pin them for reproducible
-   deploys.
+Neither of the two layers above reaches a host that already pulled an image:
+GHCR tags moving does nothing to running containers — a container keeps the
+image it started with until the **deployment host** re-pulls. The update step
+always runs on the host:
+
+```bash
+docker compose pull && docker compose up -d   # -f … or the compose.yaml pattern
+```
+
+`up -d` recreates only the services whose image actually moved. Note that the
+versioned tags (`:3.8.51-web-cli`) are re-pointed at new digests by every
+upstream-sync rebuild — pin by **digest** (`:full-browser@sha256:…`) for a
+deploy that never moves.
+
+To automate the host side, pick one:
+
+- **Host cron** — no extra moving parts, runs in your maintenance window:
+
+  ```bash
+  # crontab -e — daily at 04:37
+  37 4 * * * cd /opt/omniroute && docker compose pull --quiet && docker compose up -d
+  ```
+
+- **Watchtower** — a companion container that re-pulls on a schedule. The
+  standalone example ships one behind the `auto-update` profile; for other
+  compose files add:
+
+  ```yaml
+    watchtower:
+      image: ghcr.io/nicholas-fedor/watchtower:latest  # maintained fork of containrrr/watchtower
+      restart: unless-stopped
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock
+      environment:
+        - WATCHTOWER_POLL_INTERVAL=86400   # check daily (seconds)
+        - WATCHTOWER_CLEANUP=true          # prune superseded image layers
+  ```
+
+  An update **recreates the app container** — in-flight requests drop. Pick a
+  quiet interval, or set `WATCHTOWER_LABEL_ENABLE=true` and label only the
+  services you want auto-updated.
 
 ## Visibility
 
