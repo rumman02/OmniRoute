@@ -12,7 +12,7 @@ Each tier contains everything the tier above it has:
 
 | Tag                       | Dockerfile target    | Contents                                                                  |
 | ------------------------- | -------------------- | ------------------------------------------------------------------------- |
-| `base`                    | `runner-base`        | Lean runtime (~500 MB). No browsers, no CLI tools.                        |
+| `base`                    | `runner-base`        | Lean runtime (~1.1 GB compressed). No browsers, no CLI tools.             |
 | `web`                     | `runner-web`         | +Chromium/Playwright — web-cookie providers (gemini-web, claude-web, …)    |
 | `web-cli`                 | `runner-web-cli`     | +`git`, `docker.io`, `docker-compose` and global CLIs: `@openai/codex`, `@anthropic-ai/claude-code`, `droid`, `openclaw` |
 | `web-cli-host`            | `runner-web-cli-host`| +host-mode defaults (`CLI_MODE=host`, `/host-*` lookup paths) — see below  |
@@ -95,6 +95,32 @@ OMNIROUTE_TIER=web-cli docker compose -f docker-compose.ghcr.yml up -d        # 
 OMNIROUTE_TIER=full docker compose -f docker-compose.ghcr.yml \
   --profile codex-app-server up -d                                            # + app-server sidecar
 ```
+
+### What differs between tiers at runtime
+
+Nothing in the compose service definition — every tier takes the same env
+block, ports, volumes and healthcheck; only the image tag changes
+(`OMNIROUTE_TIER`). There is no per-tier env add/sub to do. The differences
+live in the image itself:
+
+| Tier | New baked-in env vs the tier below | Entrypoint | You typically add |
+| --- | --- | --- | --- |
+| `base` | — | `/app/check-permissions.sh` | nothing |
+| `web` | `PLAYWRIGHT_BROWSERS_PATH` | 〃 | nothing; `--profile web-cookie` only for ChatGPT Web (Codex) |
+| `web-cli` | — (content only: CLIs + git/docker) | 〃 | `- /var/run/docker.sock:/var/run/docker.sock` if the CLIs need Docker |
+| `web-cli-host` | `CLI_MODE=host`, `CLI_EXTRA_PATHS`, `CLI_CONFIG_HOME=/host-home`, `CLI_ALLOW_CONFIG_WRITES=true` | 〃 | the `/host-*` volume mounts (see compose comments) |
+| `full` | `OMNIROLE=omniroute` | `/app/entrypoint.sh` (role switch; delegates to check-permissions.sh) | nothing; `-e OMNIROLE=codex-app-server` runs the sidecar role |
+| `full-browser` | `CHATGPT_WEB_CODEX_EMBEDDED_BROWSER=1` | 〃 | `- …:/browser-profile` volume to persist the browser login session |
+
+Every baked-in env is a plain `ENV` — override any of them per-run with `-e` /
+compose `environment:`. `CMD` (`node dev/run-standalone.mjs`), the
+`HEALTHCHECK` and the non-root `node` user are identical across all tiers.
+
+Sizes (compressed, linux/amd64, measured 2026-08-27 from the registry):
+`base` ≈ 1.1 GB, `web` ≈ 1.5 GB, and `web-cli`/`web-cli-host`/`full`/
+`full-browser` all ≈ 2.1 GB — the steps above `web-cli` add only KB-scale
+layers (entrypoint + cdp-proxy scripts), so pull cost between them is ~zero
+(shared layers). Sidecar ≈ 0.9 GB.
 
 ## The `host` tier caveat
 
