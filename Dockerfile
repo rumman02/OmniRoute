@@ -398,3 +398,8 @@ FROM runner-web-cli-host AS runner-full
 COPY --chmod=755 docker/ghcr-tiers/entrypoint.sh /app/entrypoint.sh
 ENV OMNIROLE=omniroute
 ENTRYPOINT ["/app/entrypoint.sh"]
+# Declaring ENTRYPOINT above resets the CMD inherited from runner-base to
+# empty (documented Dockerfile semantics), so the server command must be
+# re-declared — without it the entrypoint's `exec "$@"` runs with no args and
+# the container exits 0 immediately (found running latest-full locally).
+CMD ["node", "dev/run-standalone.mjs"]
