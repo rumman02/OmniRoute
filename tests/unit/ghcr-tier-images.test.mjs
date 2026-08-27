@@ -155,3 +155,29 @@ describe("GHCR tier images — upstream sync workflow", () => {
     assert.match(syncWf, /gh issue create/);
   });
 });
+
+describe("GHCR tier images — examples", () => {
+  const read = (p) => readFileSync(fileURLToPath(new URL(p, repoRoot)), "utf8");
+
+  it("standalone compose: zero-config, tier-selectable, no env_file dependency", () => {
+    const standalone = read("docker/ghcr-tiers/examples/docker-compose.standalone.yml");
+    assert.match(
+      standalone,
+      /image: ghcr\.io\/rumman02\/omniroute:\$\{OMNIROUTE_TIER:-base\}/
+    );
+    // The whole point of the standalone file: works without the repo's .env.
+    assert.ok(!standalone.includes("env_file:"), "must not require env_file");
+    // Sidecars behind profiles, same as the main compose file.
+    assert.match(standalone, /- OMNIROLE=codex-app-server/);
+    assert.match(standalone, /127\.0\.0\.1:1456\/readyz/);
+    assert.match(standalone, /image: ghcr\.io\/rumman02\/omniroute:chatgpt-web-codex-browser/);
+  });
+
+  it("custom-tier Dockerfile builds on a published tier and returns to USER node", () => {
+    const dockerfile = read("docker/ghcr-tiers/examples/custom-tier.Dockerfile");
+    assert.match(dockerfile, /^FROM ghcr\.io\/rumman02\/omniroute:web-cli$/m);
+    // Extending must end non-root, mirroring the parent stage's contract.
+    const users = [...dockerfile.matchAll(/^USER (\S+)$/gm)].map((m) => m[1]);
+    assert.equal(users[users.length - 1], "node");
+  });
+});

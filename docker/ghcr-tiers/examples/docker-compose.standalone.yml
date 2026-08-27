@@ -1,0 +1,119 @@
+# ──────────────────────────────────────────────────────────────────────
+#  OmniRoute — standalone example (single file, zero config)
+# ──────────────────────────────────────────────────────────────────────
+#
+#  Unlike the repo's docker-compose.ghcr.yml (which needs the repo checkout
+#  for its env_file), this file is fully self-contained: copy it to any
+#  machine and `docker compose up -d`. Secrets (JWT_SECRET,
+#  STORAGE_ENCRYPTION_KEY, API_KEY_SECRET) are auto-generated on first boot
+#  and persisted to the data volume — you only need INITIAL_PASSWORD if you
+#  want a known dashboard password from the start.
+#
+#  Pick the image tier via OMNIROUTE_TIER (base|web|web-cli|web-cli-host|full):
+#
+#    docker compose -f docker-compose.standalone.yml up -d
+#    OMNIROUTE_TIER=web-cli docker compose -f docker-compose.standalone.yml up -d
+#
+#  Optional sidecars (compose profiles):
+#    --profile web-cookie        Chromium CDP sidecar for ChatGPT Web (Codex)
+#    --profile codex-app-server  codex app-server sidecar on ws://…:1456
+#
+#    OMNIROUTE_TIER=full docker compose -f docker-compose.standalone.yml \
+#      --profile codex-app-server up -d
+# ──────────────────────────────────────────────────────────────────────
+
+services:
+  redis:
+    image: docker.io/library/redis:8.6.5-alpine
+    restart: unless-stopped
+    # Loopback-only: no requirepass (same policy as the repo's compose file).
+    ports:
+      - "${REDIS_BIND_HOST:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --save 60 1 --loglevel warning
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  omniroute:
+    image: ghcr.io/rumman02/omniroute:${OMNIROUTE_TIER:-base}
+    restart: unless-stopped
+    stop_grace_period: 40s
+    environment:
+      - PORT=${PORT:-20128}
+      - REDIS_URL=redis://redis:6379
+      - NODE_OPTIONS=--max-old-space-size=2048
+      # Set a known first-login password, or leave unset and read the
+      # auto-generated credentials from the data volume. Rotate after login.
+      - INITIAL_PASSWORD=${INITIAL_PASSWORD:-}
+      # Codex app-server transport — inert unless the profile below is up.
+      - OMNIROUTE_CODEX_APPSERVER_WS=ws://codex-app-server:1456
+      - OMNIROUTE_CODEX_APPSERVER_WS_TOKEN_FILE=/run/codex-appserver/token
+      # ChatGPT Web (Codex) Chromium sidecar — inert unless web-cookie is up.
+      - CHATGPT_WEB_CODEX_CDP_URL=http://chatgpt-web-codex-browser:9223
+    ports:
+      - "${DASHBOARD_PORT:-20128}:${PORT:-20128}"
+    volumes:
+      # THE one rule that matters: persist /app/data or everything
+      # (DB, auto-generated secrets, provider configs) dies with the container.
+      - omniroute-data:/app/data
+      # Shared with the codex-app-server profile sidecars below.
+      - codex-appserver-token:/run/codex-appserver
+      - codex-appserver-home:/home/node/.codex
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "healthcheck.mjs"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ── Profile: web-cookie — Chromium CDP sidecar for ChatGPT Web (Codex) ──
+  chatgpt-web-codex-browser:
+    image: ghcr.io/rumman02/omniroute:chatgpt-web-codex-browser
+    restart: unless-stopped
+    shm_size: "2gb"
+    volumes:
+      - chatgpt-web-codex-browser-data:/browser-profile
+    profiles:
+      - web-cookie
+
+  # ── Profile: codex-app-server — Codex CLI app-server sidecar ────────────
+  # Always the `full` image regardless of OMNIROUTE_TIER: it carries both the
+  # codex CLI and the OMNIROLE entrypoint. OMNIROLE switches it to sidecar mode.
+  codex-app-server:
+    image: ghcr.io/rumman02/omniroute:full
+    restart: unless-stopped
+    environment:
+      - OMNIROLE=codex-app-server
+      - CODEX_HOME=/home/node/.codex
+    volumes:
+      - codex-appserver-token:/run/codex-appserver
+      - codex-appserver-home:/home/node/.codex
+    # Internal-only (no ports:) — reached at ws://codex-app-server:1456.
+    healthcheck:
+      test:
+        ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:1456/readyz',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    profiles:
+      - codex-app-server
+
+volumes:
+  omniroute-data:
+    name: omniroute-data
+  redis-data:
+    name: omniroute-redis-data
+  chatgpt-web-codex-browser-data:
+    name: omniroute-chatgpt-web-codex-browser-data
+  codex-appserver-token:
+    name: omniroute-codex-appserver-token
+  codex-appserver-home:
+    name: omniroute-codex-appserver-home

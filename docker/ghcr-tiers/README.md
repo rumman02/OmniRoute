@@ -33,6 +33,15 @@ docker pull ghcr.io/rumman02/omniroute:web-cli
 docker run -p 20128:20128 -v ./data:/app/data ghcr.io/rumman02/omniroute:web-cli
 ```
 
+Ready-made examples live in [`examples/`](examples/):
+
+- [`docker-compose.standalone.yml`](examples/docker-compose.standalone.yml) —
+  single file, zero config: copy to any machine and `docker compose up -d`.
+  Secrets auto-generate on first boot into the data volume; tier selected via
+  `OMNIROUTE_TIER`; `web-cookie` / `codex-app-server` profiles for sidecars.
+- [`custom-tier.Dockerfile`](examples/custom-tier.Dockerfile) — build a private
+  image on top of a published tier (extra CLIs/OS packages as thin layers).
+
 ### Environment variables
 
 The only **required** env setup is secrets on first boot — everything else has
