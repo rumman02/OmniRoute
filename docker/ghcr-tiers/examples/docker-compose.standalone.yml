@@ -120,6 +120,23 @@ services:
     profiles:
       - codex-app-server
 
+  # ── Optional profile: auto-update (dormant unless enabled) ────────────────
+  # Re-pulls and recreates containers when their GHCR tag moves (the tier
+  # pipeline republishes on every upstream sync). Enable with:
+  #   docker compose --profile auto-update up -d
+  # NOTE: an update RECREATES the app container — in-flight requests drop.
+  # See README.md → "Updating a running deployment" for trade-offs.
+  watchtower:
+    image: ghcr.io/nicholas-fedor/watchtower:latest  # maintained fork of containrrr/watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_POLL_INTERVAL=86400   # check daily (seconds)
+      - WATCHTOWER_CLEANUP=true          # prune superseded image layers
+    profiles:
+      - auto-update
+
 volumes:
   omniroute-data:
     name: omniroute-data
