@@ -106,6 +106,14 @@ describe("GHCR tier images — role entrypoint", () => {
     assert.match(entrypoint, /--remote-debugging-port=9222/);
     assert.match(entrypoint, /--user-data-dir=\/browser-profile/);
     assert.match(entrypoint, /node \/app\/cdp-proxy\.mjs &/);
+    // Chromium discovery glob must match BOTH Playwright layouts: the pinned
+    // playwright 1.62+ ships Chromium as Chrome-for-Testing on linux x64,
+    // extracting to chromium-*/chrome-linux64/chrome, while the non-CfT arm64
+    // build extracts to chromium-*/chrome-linux/chrome. A literal
+    // '*/chrome-linux/chrome' never matches on amd64 → the embedded browser
+    // silently never launches ("app only" warning).
+    assert.match(entrypoint, /-path '\*chrome-linux\*\/chrome'/);
+    assert.doesNotMatch(entrypoint, /-path '\*\/chrome-linux\/chrome'/);
     // App must reach the browser through the proxy on loopback. Both compose
     // files bake CHATGPT_WEB_CODEX_CDP_URL=http://chatgpt-web-codex-browser:9223
     // into the env for every tier, so a plain ${VAR:-default} would never fire

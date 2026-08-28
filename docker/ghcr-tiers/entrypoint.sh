@@ -33,8 +33,13 @@ fi
 # children of this container, and point the app at it on loopback. No-op in
 # every other tier (flag unset) and when no Chromium is present.
 if [ "${CHATGPT_WEB_CODEX_EMBEDDED_BROWSER:-0}" = "1" ]; then
+  # Playwright 1.62+ ships Chromium as Chrome-for-Testing on linux x64, which
+  # extracts to chromium-*/chrome-linux64/chrome; the non-CfT arm64 build
+  # extracts to chromium-*/chrome-linux/chrome. Match both layouts — a literal
+  # '*/chrome-linux/chrome' silently never matches on amd64 (found live on a
+  # full-browser deployment: browser never launches, "app only" warning).
   CHROME_BIN=$(find "${PLAYWRIGHT_BROWSERS_PATH:-/home/node/.cache/ms-playwright}" \
-    -path '*/chrome-linux/chrome' -type f 2>/dev/null | head -n 1)
+    -path '*chrome-linux*/chrome' -type f 2>/dev/null | head -n 1)
   if [ -n "$CHROME_BIN" ] && [ -f /app/cdp-proxy.mjs ]; then
     node /app/cdp-proxy.mjs &
     "$CHROME_BIN" --headless=new --no-sandbox --disable-dev-shm-usage \
