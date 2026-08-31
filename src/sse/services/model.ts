@@ -1,13 +1,9 @@
 // Re-export from open-sse with localDb integration
-import {
-  getModelAliases,
-  getComboByName,
-  getComboById,
-  getComboByNameInsensitive,
-  getCachedProviderNodes,
-  getCustomModels,
-} from "@/lib/localDb";
-import { getCachedSettings } from "@/lib/localDb";
+import { getModelAliases, getCustomModels } from "@/lib/db/models";
+import { getComboByName, getComboById, getComboByNameInsensitive } from "@/lib/db/combos";
+import { getCachedProviderNodes, getCachedSettings } from "@/lib/db/readCache";
+
+import { getSyncedAutoAliases } from "@/lib/providerModels/syncedAutoAliases.ts";
 import { getActiveSyncedCatalog } from "@/lib/db/models/activeSyncedCatalog";
 import { getModelCompatOverrides } from "@/lib/db/models/compat";
 import { getNoAuthHydrationProviderIds } from "./noAuthProviderSiblings";
@@ -63,6 +59,8 @@ function buildWildcardAliasMap(settings: Record<string, unknown>): Record<string
 
 /**
  * Build a combined model alias map that merges all alias stores:
+ * 0. Auto-aliases derived from synced Antigravity-family discovery (lowest
+ *    precedence — bare base name → default tier; see syncedAutoAliases.ts).
  * 1. DB-namespace aliases (key_value WHERE namespace='modelAliases') — set via
  *    /api/models/alias/ and seeded at startup.
  * 2. Settings-based exact aliases (settings.modelAliases) — set via the Settings UI and
@@ -78,9 +76,10 @@ function buildWildcardAliasMap(settings: Record<string, unknown>): Record<string
  * cannot collide with a real model id, so ordering never affects exact-alias lookups.
  */
 async function getCombinedModelAliases(): Promise<Record<string, unknown>> {
-  const [dbAliases, settings] = await Promise.all([
+  const [dbAliases, settings, autoAliases] = await Promise.all([
     getModelAliases().catch(() => ({})),
     getCachedSettings().catch(() => ({}) as Record<string, unknown>),
+    getSyncedAutoAliases().catch(() => ({}) as Record<string, string>),
   ]);
 
   const settingsAliases =
@@ -92,7 +91,9 @@ async function getCombinedModelAliases(): Promise<Record<string, unknown>> {
 
   const wildcardMap = buildWildcardAliasMap(settings);
 
-  return { ...dbAliases, ...settingsAliases, ...wildcardMap };
+  // Auto-aliases (derived from synced discovery) merge first — lowest
+  // precedence: any explicit DB/settings/wildcard alias always wins.
+  return { ...autoAliases, ...dbAliases, ...settingsAliases, ...wildcardMap };
 }
 
 /**
@@ -653,7 +654,7 @@ export async function getComboForModel(modelStr) {
 
   // 2. NEW — check model-combo mappings table (pattern match)
   try {
-    const { resolveComboForModel } = await import("@/lib/localDb");
+    const { resolveComboForModel } = await import("@/lib/db/modelComboMappings");
     const mapped = await resolveComboForModel(baseModelStr || modelStr);
     if (mapped && (mapped as any).models?.length > 0) {
       return mapped;
