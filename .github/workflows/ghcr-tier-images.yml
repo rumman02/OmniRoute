@@ -89,6 +89,15 @@ jobs:
       # is fixing in PR #11647 (their arm64 runs). Passed here instead of
       # editing the Dockerfile so this branch stays conflict-free when the
       # upstream fix lands (same value → no-op).
+      #
+      # OMNIROUTE_USE_TURBOPACK=0 → webpack. Three consecutive hosted-runner
+      # builds (2026-08-28, 2026-08-31 ×2) died ResourceExhausted in
+      # `npm run build` under Turbopack on BOTH arches, even with the workers
+      # fix upstream shipped in #11663. Webpack is the documented Docker
+      # escape hatch (Dockerfile comment) and what upstream's own
+      # docker-publish.yml builds with — they kept OOMing on hosted runners
+      # too and moved amd64 to a 31 GB self-hosted box (#11976); this fork has
+      # no such box, so webpack + 1 worker is the heaviest reduction available.
       - name: Build and push BASE platform image by digest
         id: build-base
         uses: docker/build-push-action@v7
@@ -100,6 +109,7 @@ jobs:
           tags: ${{ env.GHCR_IMAGE }}
           build-args: |
             OMNIROUTE_BUILD_WORKERS=2
+            OMNIROUTE_USE_TURBOPACK=0
           cache-from: type=gha,scope=ghcr-tiers-${{ matrix.arch }}
           cache-to: type=gha,scope=ghcr-tiers-${{ matrix.arch }},mode=max
         env:
@@ -116,6 +126,7 @@ jobs:
           tags: ${{ env.GHCR_IMAGE }}
           build-args: |
             OMNIROUTE_BUILD_WORKERS=2
+            OMNIROUTE_USE_TURBOPACK=0
           cache-from: type=gha,scope=ghcr-tiers-${{ matrix.arch }}
           cache-to: type=gha,scope=ghcr-tiers-${{ matrix.arch }},mode=max
         env:
@@ -132,6 +143,7 @@ jobs:
           tags: ${{ env.GHCR_IMAGE }}
           build-args: |
             OMNIROUTE_BUILD_WORKERS=2
+            OMNIROUTE_USE_TURBOPACK=0
           cache-from: type=gha,scope=ghcr-tiers-${{ matrix.arch }}
           cache-to: type=gha,scope=ghcr-tiers-${{ matrix.arch }},mode=max
         env:
@@ -148,6 +160,7 @@ jobs:
           tags: ${{ env.GHCR_IMAGE }}
           build-args: |
             OMNIROUTE_BUILD_WORKERS=2
+            OMNIROUTE_USE_TURBOPACK=0
           cache-from: type=gha,scope=ghcr-tiers-${{ matrix.arch }}
           cache-to: type=gha,scope=ghcr-tiers-${{ matrix.arch }},mode=max
         env:
@@ -164,6 +177,7 @@ jobs:
           tags: ${{ env.GHCR_IMAGE }}
           build-args: |
             OMNIROUTE_BUILD_WORKERS=2
+            OMNIROUTE_USE_TURBOPACK=0
           cache-from: type=gha,scope=ghcr-tiers-${{ matrix.arch }}
           cache-to: type=gha,scope=ghcr-tiers-${{ matrix.arch }},mode=max
         env:
@@ -180,6 +194,7 @@ jobs:
           tags: ${{ env.GHCR_IMAGE }}
           build-args: |
             OMNIROUTE_BUILD_WORKERS=2
+            OMNIROUTE_USE_TURBOPACK=0
           cache-from: type=gha,scope=ghcr-tiers-${{ matrix.arch }}
           cache-to: type=gha,scope=ghcr-tiers-${{ matrix.arch }},mode=max
         env:
