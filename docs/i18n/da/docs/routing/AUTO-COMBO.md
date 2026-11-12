@@ -317,7 +317,7 @@ OmniRoute's combo motor understøtter** 20 routingstrategier** (erklæret i `src
 
 - Hver anmodning trækker** en** trin med sandsynlighed `weight / totalWeight`; de resterende trin er sorteret efter faldende vægt som reservekæden for den pågældende anmodning.
 - Et trin, hvis vægt er `0` (eller mangler) er** aldrig tegnet** mens ethvert andet trin har en vægt > 0 — kan det kun tjene som et tilbagefald, efter at det tegnede trin mislykkes. Kun hvornår** alle** vægte er 0 bliver valget ensartet.
-- Trin, hvis mål alle er utilgængelige — udbyderens strømafbryder `OPEN`, forbindelsesafkøling, model lockout — fjernes fra lodtrækningen, før det sker (`open-sse/services/combo/targetResolution.ts`), så et enkelt sundt trin kan midlertidigt vinde hver anmodning.
+- Trin, hvis mål alle er utilgængelige — -udbyderkredsløbsafbryder `OPEN`, forbindelsesafkøling, model lockout — fjernes fra lodtrækningen, før det sker (`open-sse/services/combo/targetResolution.ts`), så et enkelt sundt trin kan midlertidigt vinde hver anmodning.
 - `stickyWeightedLimit` (combo config, standard `1` = off) fastgør det tegnede trin for så mange på hinanden følgende succeser, før du tegner igen.
 
 For streng rotation brug `round-robin`; lige vægt på `weighted` giver statistisk — ikke streng — balance.
@@ -325,6 +325,20 @@ For streng rotation brug `round-robin`; lige vægt på `weighted` giver statisti
 ### Agentisk pipeline-tilstand
 
 En `pipeline` -kombination med mindst to modeller kan vælge planner/executor -routing med `config.agenticOrchestration.enabled`. Det første mål ejer planlægning og endelige svar; det andet mål udsender klient-native værktøjskald. OmniRoute registrerer værktøjsresultatfortsættelser fra anmodningsprotokollen, spørger planlæggeren, om der er behov for endnu en værktøjsrunde, og gør dynamisk enten udføreren eller planlæggeren til det klientvendte sidste trin.
+
+Valgfri `config.agenticOrchestration.contextCompaction` anvender et separat nyttelastbudget før hver planlægger- eller udførerafsendelse. Aktiver det eksplicit:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Disse er serialiserede JSON tegnbudgetter valgt af operatøren, ikke token-kontekstvinduer eller garanterede opstrømsgrænser. Den nøjagtige model IDs tilsidesætter standarden. Over tærsklen fjerner komprimering identiske værktøjsdefinitioner, trimmer overdimensionerede værktøjsbeviser med en sammenfatning og fjerner gamle komplette historiegrupper mod målforholdet. Den beholder system/developer -instruktioner, den seneste brugeranmodning, den sidste værktøjsrunde inklusive parallel calls/results og Gemini førende routing-instruktion. Instruktioner og værktøjsindstillinger på øverste niveau er bevaret. En udeladelsesmarkør registrerer fjernet historie; dette er deterministisk trimning, ikke en semantisk opsummering. Hvis den fastgjorte kontekst stadig overstiger budgettet, returnerer anmodningen 413, før modellen kontaktes. Med komprimering deaktiveret eller under tærsklen passerer anmodningen uændret.
 
 På værktøjsresultatfortsættelser stopper OmniRoute også udførelsen, når to på hinanden følgende afsluttede runder gentager de samme værktøjskald med uændrede resultater, eller når hvert eksplicit markeret resultat i to på hinanden følgende runder mislykkedes. Ændrede resultater tillader gentagne opkald (f.eks. polling). Vagten nulstiller på en ny brugeranmodning, grupperer parallelle opkald i én runde og understøtter Anthropic, Chat-afslutninger, Svar og Gemini -historier. Planlæggeren modtager årsagen og ejer det endelige svar, selvom den anmoder om endnu en værktøjsrunde.
 

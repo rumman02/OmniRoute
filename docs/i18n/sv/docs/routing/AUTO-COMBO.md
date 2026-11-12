@@ -343,11 +343,25 @@ För strikt rotation använd `round-robin`; lika vikter på `weighted` ger stati
 
 ### Agentiskt pipelineläge
 
-En `pipeline` kombo med minst två modeller kan välja planner/executor -routing med `config.agenticOrchestration.enabled`. Det första målet äger planering och slutliga svar; det andra målet avger klientinbyggda verktygsanrop. OmniRoute upptäcker fortsättningar av verktygsresultat från förfrågningsprotokollet, frågar planeraren om ytterligare en verktygsrunda behövs och gör dynamiskt antingen utföraren eller planeraren till det slutliga steget mot klienten.
+En `pipeline` kombo med minst två modeller kan välja planner/executor -routing med `config.agenticOrchestration.enabled`. Det första målet äger planering och slutliga svar; det andra målet sänder ut klientinbyggda verktygsanrop. OmniRoute upptäcker fortsättningar av verktygsresultat från förfrågningsprotokollet, frågar planeraren om ytterligare en verktygsrunda behövs och gör dynamiskt antingen utföraren eller planeraren till det slutliga steget mot klienten.
+
+Valfri `config.agenticOrchestration.contextCompaction` tillämpar en separat nyttolastbudget före varje utskick av planerare eller utförare. Aktivera det uttryckligen:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Dessa är serialiserade JSON teckenbudgetar som valts av operatören, inte tokenkontextfönster eller garanterade uppströmsgränser. Exakt modell IDs åsidosätter standard. Över tröskeln tar komprimering bort identiska verktygsdefinitioner, trimmar överdimensionerade verktygsbevis med en sammanfattning och tar bort gamla kompletta historikgrupper mot målförhållandet. Den behåller system/developer -instruktioner, den senaste användarförfrågan, den senaste verktygsomgången inklusive parallell calls/results och Gemini ledande routinginstruktion. Instruktioner på toppnivå och verktygsinställningar bevaras. En utelämnande markör registrerar borttagen historik; detta är deterministisk trimning, inte en semantisk sammanfattning. Om det fästa sammanhanget fortfarande överskrider budgeten, returnerar begäran 413 innan modellen kontaktas. Med komprimering inaktiverad eller under tröskeln passerar begäran oförändrad.
 
 På fortsättning på verktygsresultat stoppar OmniRoute också exekveringen när två på varandra följande avslutade omgångar upprepar samma verktygsanrop med oförändrade resultat, eller när varje explicit markerat resultat i två på varandra följande omgångar misslyckades. Ändrade resultat tillåter upprepade samtal (till exempel polling). Vakten återställs på en ny användarförfrågan, grupperar parallella samtal i en omgång och stöder Anthropic, Chat Completion, Responses och Gemini historik. Planeraren får anledningen och äger det slutliga svaret även om den begär ytterligare en verktygsrunda.
 
-Ytterligare modeller efter det andra målet är beställda executor-säkerhetskopior. Ett misslyckat HTTP svar eller transportundantag går vidare till nästa exekutor, med samma planerarbeslut och inbyggda verktyg men den executorns egen stegprompt och lösta anslutning. Det första lyckade svaret returneras oförändrat, inklusive SSE -strömning; misslyckanden efter att en framgångsrik stream startar kan inte testas igen här. Om alla exekutorer misslyckas, returneras det sista felet. Klienten avbryter sändningen.
+Ytterligare modeller efter det andra målet är beställda executor-säkerhetskopior. Ett misslyckat HTTP svar eller transportundantag går vidare till nästa exekutor, med samma planerarbeslut och inbyggda verktyg men den executorns egen stegprompt och lösta anslutning. Det första lyckade svaret returneras oförändrat, inklusive SSE -streaming; misslyckanden efter att en framgångsrik stream startar kan inte testas igen här. Om alla exekutorer misslyckas, returneras det sista felet. Klienten avbryter sändningen.
 
 ```json
 {
@@ -367,7 +381,7 @@ Round-robin är batchad, inte en begäran per steg:
 
 - `stickyRoundRobinLimit` (combo config, sedan `comboStickyRoundRobinLimit`, sedan `settings.stickyRoundRobinLimit`, default** 3** ) håller samma mål för så många framgångar i följd innan de roterar. Ställ in kombinationsöverstyrningen till `1` för rotation med en begäran. Kombinationsredigeraren visar det effektiva värdet och vilket lager det kom från.
 - `connectionAwareExpansion` (combo config, sedan settings, default** falsk** ) utökar varje steg på leverantörsnivå till mål per konto före rotation. Grupp-B-strategier (prioritet, viktad, round-robin, slumpmässig, p2c, minst använda, kostnadsoptimerad, lkgp, fill-first, strikt-slumpmässig, kontextoptimerad, cache-optimerad, kontextrelä, fusion, pipeline) behåller en vy på leverantörsnivå tills detta är på. Kombinationsredigeraren visar ärv/på/av; inherit använder den globala standarden (av).
-- Lokal routing för prompt-cache (`promptCacheAffinityEnabled`, standard** sann** ) ordnar om fästa anslutningar så att matchande cache-nycklar stannar på ett konto. Det har företräde framför round-robin och viktad rotation över fästa per konto steg. Stäng av den under Inställningar → Combo standards om du behöver strikt rotation. Det finns ingen per-kombo åsidosättande.
+- Lokal routing för prompt-cache (`promptCacheAffinityEnabled`, standard** sann** ) ordnar om fästa anslutningar så att matchande cache-nycklar stannar på ett konto. Det har företräde framför round-robin och viktad rotation över fästa per konto steg. Stäng av den under Inställningar → Combo standarder om du behöver strikt rotation. Det finns ingen per-kombo åsidosättande.
 
 För rotation av flera konton på en modell, föredrar** ett dynamiskt kontosteg** (tom `connectionId`, hel pool) med sticky limit `1`, inte tre nålade `connectionId` s. Fästa steg plus affinitet kollapsar på samma konto även när RR räknaren går framåt.
 

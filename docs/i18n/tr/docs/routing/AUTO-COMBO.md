@@ -332,11 +332,11 @@ OmniRoute birleşik motor destekleri** 20 yönlendirme stratejisi** ( `src/share
 | `cost-optimized`    | Katalog fiyatlandırmasına göre istek başına $'ı en aza indirin                                                                                                                                                   |
 | `reset-aware` ⭐    | Kota sıfırlama süresine göre önceliklendirin — kısa sıfırlama aralıkları daha üst sıralarda yer alır                                                                                                             |
 | `reset-window`      | Kota penceresi en kısa sürede sıfırlanan hedefleri tercih edin                                                                                                                                                   |
-| `headroom`          | En fazla kota boşluğuna sahip hedefi seçin                                                                                                                                                                       |
+| `headroom`          | En fazla kalan kota payına sahip hedefi seçin                                                                                                                                                                    |
 | `quota-weighted`    | Tükenen hesapları atlayın, ardından kalan kotanın uçuş sırasındaki yüke bölünmesiyle orantılı olarak geri kalanlar arasından seçim yapın; mevcut görüşmeler sabit kalıyor                                        |
 | `strict-random`     | Tekrarların tekilleştirilmesi olmadan rastgele                                                                                                                                                                   |
 | `auto`              | Otomatik Birleşik puanlamayı (16 faktörlü) — kullanın** tavsiye edilen**                                                                                                                                         |
-| `lkgp`              | Bilinen Son İyi Yol (son başarılı sağlayıcıya sabitlenir, ardından kurallara geri döner)                                                                                                                         |
+| `lkgp`              | Bilinen Son İyi Yol (en son başarılı sağlayıcıya sabitlenir, ardından kurallara geri döner)                                                                                                                      |
 | `context-optimized` | Mevcut bağlam boyutuna en uygun hedefi seçin                                                                                                                                                                     |
 | `cache-optimized`   | Hedefleri istem-önbellek benzeşimine göre yeniden sıralayın — bu isteğin önbelleğe alınmış önekini zaten tutması en muhtemel bağlantı ilk önce denenir (`open-sse/services/combo/promptCacheAffinity.ts`, #8008) |
 | `fusion` 🧬         | Modellerden oluşan bir paneli paralel olarak genişletin, ardından bir jüri aracılığıyla bir cevabı sentezleyin (aşağıya bakın)                                                                                   |
@@ -344,7 +344,7 @@ OmniRoute birleşik motor destekleri** 20 yönlendirme stratejisi** ( `src/share
 
 ⭐ = v3.8.0'daki yenilikler · 🧬 = v3.8.36'daki yenilikler
 
-### `weighted` anlambilimi
+### `weighted` semantiği
 
 `weighted` bir** istek başına orantılı rastgele çekiliş** (`open-sse/services/combo/targetSorters.ts` → `selectWeightedTarget`), ekolayzır değil:
 
@@ -358,6 +358,20 @@ Kesin rotasyon için `round-robin` kullanın; `weighted` üzerindeki eşit ağı
 ### Ajan boru hattı modu
 
 En az iki modele sahip bir `pipeline` kombinasyonu, `config.agenticOrchestration.enabled` ile planner/executor yönlendirmeyi tercih edebilir. İlk hedef planlama ve nihai cevaplara sahiptir; ikinci hedef istemciye özgü araç çağrıları yayar. OmniRoute istek protokolünden gelen araç-sonuç devamlılıklarını tespit eder, planlayıcıya başka bir araç turunun gerekli olup olmadığını sorar ve dinamik olarak yürütücüyü veya planlayıcıyı müşteriye yönelik son adım yapar.
+
+İsteğe bağlı `config.agenticOrchestration.contextCompaction` her planlayıcı veya uygulayıcı gönderiminden önce ayrı bir yük bütçesi uygular. Açıkça etkinleştirin:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Bunlar, belirteç bağlam pencereleri veya garanti edilen yukarı akış sınırları değil, operatör tarafından seçilen serileştirilmiş JSON karakter bütçeleridir. Tam model IDs varsayılanı geçersiz kılar. Eşiğin üzerinde sıkıştırma, aynı takım tanımlarını kaldırır, büyük boyutlu takım kanıtlarını bir özet ile kırpar ve eski tam geçmiş gruplarını hedef orana doğru kaldırır. system/developer talimatlarını, en son kullanıcı isteğini, paralel calls/results dahil son araç turunu ve Gemini önde gelen yönlendirme talimatını korur. Üst düzey talimatlar ve araç ayarları korunur. Bir ihmal işaretleyicisi, kaldırılan geçmişi kaydeder; bu deterministik bir düzeltmedir, anlamsal bir özet değil. Sabitlenmiş bağlam hâlâ bütçeyi aşıyorsa istek, modelle iletişime geçmeden önce 413 değerini döndürür. Sıkıştırma devre dışı bırakıldığında veya eşiğin altındayken istek değişmeden geçer.
 
 Araç-sonucu devamlılıklarında OmniRoute, birbirini takip eden iki tamamlanmış tur aynı araç çağrılarını değişmeden sonuçlarla tekrarladığında veya ardışık iki turda açıkça işaretlenen her sonuç başarısız olduğunda yürütmeyi durdurur. Değiştirilen sonuçlar tekrarlanan aramalara (örneğin yoklama) izin verir. Koruma, yeni bir kullanıcı isteği üzerine sıfırlanır, paralel çağrıları tek bir turda gruplandırır ve Anthropic, Sohbet Tamamlamaları, Yanıtlar ve Gemini geçmişlerini destekler. Planlayıcı nedeni alır ve başka bir araç turu talep etse bile nihai cevabın sahibi olur.
 

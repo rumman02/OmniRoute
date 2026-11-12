@@ -337,7 +337,7 @@ OmniRoute combo engine podržava** 20 strategija rutiranja** (deklarirano u `src
 
 - Svaki zahtjev izvlači** jedan** korak sa vjerovatnoćom `weight / totalWeight`; preostali koraci su poređani po opadajućoj težini kao rezervni lanac za taj zahtjev.
 - Korak čija je težina `0` (ili nedostaje) je** nikad nacrtana** dok svaki drugi korak ima težinu > 0 — on može poslužiti samo kao rezerva nakon što nacrtani korak ne uspije. Samo kada** sve** težine su 0 da li selekcija postaje uniformna.
-- Koraci čiji su svi ciljevi nedostupni — provajder, prekidač `OPEN`, hlađenje veze, zaključavanje modela — uklanjaju se iz izvlačenja prije nego što se to dogodi (`open-sse/services/combo/targetResolution.ts`), tako da jedan zdrav korak može privremeno pobijediti svaki zahtjev.
+- Koraci čiji su svi ciljevi nedostupni prekidač — provajdera `OPEN`, hlađenje veze, zaključavanje modela — uklanjaju se iz izvlačenja prije nego što se to dogodi (`open-sse/services/combo/targetResolution.ts`), tako da jedan zdrav korak može privremeno pobijediti svaki zahtjev.
 - `stickyWeightedLimit` (kombinovana konfiguracija, podrazumevani `1` = isključen) prikačuje nacrtani korak za toliko uzastopnih uspeha pre ponovnog crtanja.
 
 Za strogu rotaciju koristite `round-robin`; jednake težine na `weighted` daju statističku — a ne strogu — ravnotežu.
@@ -346,9 +346,23 @@ Za strogu rotaciju koristite `round-robin`; jednake težine na `weighted` daju s
 
 `pipeline` kombinacija sa najmanje dva modela može se odlučiti za planner/executor rutiranje sa `config.agenticOrchestration.enabled`. Prvi cilj posjeduje planiranje i konačne odgovore; drugi cilj emituje pozive alata koji su izvorni klijentu. OmniRoute otkriva nastavke rezultata alata iz protokola zahtjeva, pita planera da li je potrebna još jedna runda alata i dinamički čini izvršioca ili planera posljednjim korakom okrenutim prema klijentu.
 
+Opciono `config.agenticOrchestration.contextCompaction` primjenjuje poseban proračun korisnog opterećenja prije svakog slanja planera ili izvršitelja. Omogućite to eksplicitno:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Ovo su serijalizirani budžeti JSON znakova koje bira operater, a ne kontekstni prozori tokena ili zajamčena ograničenja uzvodne struje. Tačan model IDs nadjačava zadani. Iznad praga, sabijanje uklanja identične definicije alata, obrezuje dokaze prevelikog alata sa sažetkom i uklanja stare kompletne grupe istorije prema ciljnom omjeru. Zadržava system/developer instrukcije, posljednji korisnički zahtjev, posljednju rundu alata uključujući paralelni calls/results i Gemini vodeću instrukciju rutiranja. Instrukcije najvišeg nivoa i postavke alata su sačuvane. Oznaka propusta bilježi uklonjenu historiju; ovo je determinističko skraćivanje, a ne semantički sažetak. Ako zakačeni kontekst i dalje premašuje budžet, zahtjev vraća 413 prije kontaktiranja modela. Kada je sabijanje onemogućeno ili ispod praga, zahtjev prolazi kroz nepromijenjen.
+
 Na nastavkama rezultata alata, OmniRoute također zaustavlja izvršenje kada dvije uzastopne završene runde ponavljaju iste pozive alata sa nepromijenjenim rezultatima, ili kada svaki eksplicitno označen rezultat u dvije uzastopne runde nije uspio. Promijenjeni rezultati dozvoljavaju ponovljene pozive (na primjer, anketiranje). Zaštitnik se resetuje na novi zahtev korisnika, grupiše paralelne pozive u jednu rundu i podržava Anthropic, dovršavanja razgovora, odgovore i Gemini istorije. Planer prima razlog i posjeduje konačni odgovor čak i ako zatraži još jednu rundu alata.
 
-Dodatni modeli nakon drugog cilja su naređeni izvršiocima rezervnih kopija. Neuspeli HTTP odgovor ili izuzetak transporta napreduje do sledećeg izvršioca, noseći istu odluku planera i izvorne alate, ali sopstveni korak tog izvršioca i rešenu vezu. Prvi uspješan odgovor se vraća nepromijenjen, uključujući SSE streaming; kvarovi nakon uspješnog pokretanja prijenosa ne mogu se ponoviti ovdje. Ako svi izvršioci ne uspiju, vraća se zadnji neuspjeh. Klijent prekida slanje zaustavljanja.
+Dodatni modeli nakon drugog cilja su naređeni izvršiocima rezervnih kopija. Neuspeli HTTP odgovor ili izuzetak transporta napreduje do sledećeg izvršioca, noseći istu odluku planera i izvorne alate, ali sopstveni korak tog izvršioca i rešenu vezu. Prvi uspješan odgovor se vraća nepromijenjen, uključujući SSE streaming; neuspjesi nakon uspješnog pokretanja prijenosa ne mogu se ponoviti ovdje. Ako svi izvršioci ne uspiju, vraća se zadnji neuspjeh. Klijent prekida slanje zaustavljanja.
 
 ```json
 {

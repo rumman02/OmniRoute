@@ -65,7 +65,7 @@ Za isti provider/model, vrijednosti iz slojeva višeg prioriteta prepisuju odgov
 | `MODELS_DEV_SYNC_ENABLED`  | _(nije postavljeno)_ | Poništenje slijedi nakon prekidača postavki; `1/true/on/yes` se prisilno uključuje, a `0/false/off/no` se prisilno isključuje (čak i ako Postavke to omoguće). |
 | `MODELS_DEV_SYNC_INTERVAL` | `86400`              | Zadani interval sinkronizacije models.dev u sekundama (dnevno).                                                                                                |
 
-`PRICING_SYNC_SOURCES` radi** ne** omogućiti models.dev; kontrolira samo LiteLLM sinkronizaciju. Brisanje nadjačavanja korisnika ne briše niti sinkronizirani prostor imena; sljedeći dostupni sloj cijena postaje učinkovit. Za model bez cijene, provjerite postavke sinkronizacije i `sourceMap` prije dodavanja ručnog nadjačavanja.
+`PRICING_SYNC_SOURCES` radi** ne** omogućiti models.dev; kontrolira samo LiteLLM sinkronizaciju. Brisanje nadjačavanja korisnika ne briše niti sinkronizirani prostor naziva; sljedeći dostupni sloj cijena postaje učinkovit. Za model bez cijene, provjerite postavke sinkronizacije i `sourceMap` prije dodavanja ručnog nadjačavanja.
 
 ### Formula troška
 
@@ -77,13 +77,13 @@ Trošak se izračunava po zahtjevu iz broja tokena i stope po milijun tokena u [
 - **Izlazni žetoni** × `output` stopa.
 - **Tokeni obrazloženja** × `reasoning` stopa (vraća se na izlaznu brzinu).
 
-Sve se stope tumače kao USD za 1.000.000 tokena. Codex "brza"/"prioritetna" ili "fleksibilna" razina usluge primjenjuje multiplikator troškova (`getCodexFastCostMultiplier`) — npr. flex se naplaćuje s popustom od 50% simbola, pojavljuje se kao** fleksibilna štednja** u nadzornoj ploči.
+Sve se stope tumače kao USD po 1.000.000 tokena. Codex "brza"/"prioritetna" ili "fleksibilna" razina usluge primjenjuje multiplikator troškova (`getCodexFastCostMultiplier`) — npr. flex se naplaćuje s popustom od 50% simbola, pojavljuje se kao** fleksibilna štednja** u nadzornoj ploči.
 
 Nazivi modela prvo se normaliziraju (prefiksi staza pružatelja usluga kao što su `openai/` ili `accounts/fireworks/models/` se uklanjaju) tako da povijesni redovi i dalje odgovaraju cijeni.
 
 ### Kako se bilježi potrošnja
 
-- Trošak po zahtjevu izračunava se nakon odgovora i bilježi paljenje i zaboravljanje tako da nikada ne dodaje kašnjenje klijentu. Potrošnja dijeljene kvote zakazana je na sljedećem otkucaju petlje događaja putem [`src/lib/quota/spendRecorder.ts`](../../src/lib/quota/spendRecorder.ts).
+- Trošak po zahtjevu izračunava se po završetku zahtjeva. Potrošnja dijeljene kvote zakazana je na sljedećem otkucaju petlje događaja putem [`src/lib/quota/spendRecorder.ts`](../../src/lib/quota/spendRecorder.ts).
 - Potrošnja API ključa sprema se u međuspremnik i ispire u serijama od strane [`SpendBatchWriter`](../../src/lib/spend/batchWriter.ts) (zadani interval ispiranja od 60 s, međuspremnik od 1000 unosa). Podesivo putem:
 
   | Env var                             | Zadano  | Svrha                                     |
@@ -91,7 +91,29 @@ Nazivi modela prvo se normaliziraju (prefiksi staza pružatelja usluga kao što 
   | `OMNIROUTE_SPEND_FLUSH_INTERVAL_MS` | `60000` | Interval ispiranja u milisekundama.       |
   | `OMNIROUTE_SPEND_MAX_BUFFER_SIZE`   | `1000`  | Maks. međuspremnik unosa prije ispiranja. |
 
-Cifre troškova nadzorne ploče su** ne** čitaju iz pohranjenog iznosa u dolarima po retku — ponovno se izračunavaju u hodu iz broja tokena i trenutne tablice cijena svaki put kada se pokrene krajnja točka analitike. To znači da ispravljanje pogrešne cijene (i ponovna sinkronizacija) retroaktivno ažurira povijesne procjene troškova.
+Troškovi preferiraju točnu naknadu koju prijavljuje pružatelj (`provider_cost_usd`), zatim snimku zahtjeva prema kataloškoj cijeni (`calculated_cost_usd`), zatim ponovno određivanje cijene tokena iz trenutnog kataloga. Pohranjeni troškovi ne naplaćuju se ponovno putem broja tokena. Redovi samo naslijeđenih tokena i dalje se mijenjaju kada se promijeni njihova kataloška cijena.
+
+### OCR i ugradnje
+
+- Uspješni `/v1/ocr` zahtjevi koriste uzvodni `usage_info.pages_processed`, a ne zatraženi raspon stranica ili broj vraćenih objekata stranice. Procjena je stranica × `ocr_cost_per_page` (apsolutni USD/page,** ne** USD/million).
+- Zahtjevi s primjedbama na dokumentima ili graničnim okvirima zahtijevaju zasebnu `ocr_cost_per_annotated_page` tarifu. Bez toga, cijena ostaje nepoznata; obična OCR tarifa nije tiho zamijenjena.
+- LiteLLM sync preslikava svoje uzvodno `annotation_cost_per_page` polje u `ocr_cost_per_annotated_page`, zadržavajući apsolutnu USD/page vrijednost i unose samo za komentare, uključujući eksplicitnu nulu. Isporučeno kanonsko polje ima prednost; nevažeće vrijednosti pseudonima se zanemaruju. Korisnička nadjačavanja cijena zadržavaju svoj uobičajeni prioritet. Pogledajte [LiteLLMOCR ključeve cijena](https://docs.litellm.ai/docs/providers/mistral_batches#batch-ocr-cost-tracking).
+- OCR usage pohranjuje broj stranica, jediničnu cijenu, izračunatu USD cijenu, API ključ i odabranu vezu. Stranice se nikada ne predstavljaju kao tokeni. Zapisnici poziva sadrže metapodatke o naplati, a ne dokument URLs, PDF bajtove ili izdvojeni tekst.
+- Uspješni `/v1/embeddings` zahtjevi bilježe jedan red upotrebe po fizičkoj seriji, uključujući odvojene serije dovršene u istoj milisekundi. Naknade koje prijavljuje pružatelj usluga imaju prednost pred procjenama tokena; kombinirani omoti ne dodaju naknadu.
+- Povijest korištenja, analitika troškova, provider/account prozori, ograničenja potrošnje ključeva API-ja, knjiga troškova zahtjeva i skupna dnevna upotreba uključuju ove naknade. Ključevi bez dnevnika zadržavaju numerički obračun bez zadržavanja izvornog teksta.
+- Nedostaju korištenje ili tarife** nepoznato** , nije besplatno: zaglavlje cijene odgovora je izostavljeno, a postojeća pravila upotrebe bez cijene primjenjuju se na ograničene API ključeve. Eksplicitno konfigurirane nulte stope ostaju važeće bez troška korištenja.
+
+Ovo je računovodstvo samo za unaprijed. Stari OCR/embedding pozivi koji nikada nisu napisali povijest korištenja ne mogu se rekonstruirati iz ove migracije. Kataloške procjene su USD procjene, a ne faktura i ne uključuju konverziju valuta, porez ili popuste.
+
+### Govor i slike
+
+- Uspješni `/v1/audio/transcriptions`, `/v1/audio/speech` i pokušaji generiranja slika dijele numeričko računovodstvo. Izravni i kombinirani pozivi nose API ključ pozivatelja i odabranu vezu; kombinirani omotač nikada ne dodaje drugo zaduženje.
+- USD kojeg je prijavio pružatelj nadmašuje katalošku procjenu, uključujući eksplicitnu nultu naknadu. OpenRouter-ov JSON `usage.cost` je normaliziran na `cost_usd`. U suprotnom, izmjereni tokeni koriste cijene tokena, sekunde transkripcije koriste cijene po sekundi, govorni unos koristi broj Unicode znakova, a slike fiksne cijene koriste stvarno vraćeni broj, a ne traženi `n`.
+- Binarni OpenRouter TTS nema JSON tijelo upotrebe. Nakon što zvuk završi ili pozivatelj otkaže, OmniRoute postavlja upit o svojoj generaciji ID na** isti** konfigurirano OpenRouter porijeklo. Zahtjev EU nikada se ne vraća na globalno izvorište. Ovo je ograničeno pretraživanje samo za čitanje; sinteza se ne pokušava ponovno za računovodstvo. Zapisi o naplati mogu se pojaviti nakon završetka zvuka: ponovni pokušaji pretraživanja izvode se u pozadini do otprilike 52 sekunde, uključujući mrežne rokove.
+- Tijekom tog traženja, audio odgovor ima `X-OmniRoute-Cost-Status: pending` i nema zaglavlje cijene odgovora. Njegovo konačno terećenje pojavljuje se u povijesti korištenja, analitici i glavnoj knjizi nakon usklađivanja. Ako metapodaci nisu dostupni, koristi se konfigurirana snimka tarife; inače trošak ostaje nepoznat.
+- Brojevi sekundi, znakova i slika imaju zasebna polja obračunske jedinice, nikad lažni brojevi tokena. Računovodstvo zadržava samo numeričku upotrebu, ne govorni tekst, transkripte ili bajtove slika. Postojeća izuzeća za slike bez cijene su nepromijenjena: tarifa za slike koja stvarno nedostaje ne zaključava ograničeni ključ, a odgovor izostavlja zaglavlje cijene umjesto da poziv proglašava besplatnim. Neuspješna trgovina s cijenama još uvijek zadržava dokaze o korištenju za provedbu zatvaranja nakon pogreške.
+
+Nikakva povijesna naknada speech/image nije izmišljena ili zatrpana. Naplata davatelja usluga ostaje referenca za fakture i za pozive čija cijena nije prijavljena.
 
 ---
 

@@ -327,13 +327,13 @@ Injin combo na OmniRoute yana goyan bayan** 20 dabaru dabaru** (an bayyana a cik
 
 ⭐ = Sabo a cikin v3.8.0 · 🧬 = Sabo a cikin v3.8.36
 
-### `weighted` ilimin tauhidi
+### ilimin `weighted`
 
 `weighted` a** daidaitaccen zane na bazuwar kowane buƙata** (`open-sse/services/combo/targetSorters.ts` → `selectWeightedTarget`), ba mai daidaitawa ba:
 
 - Kowace bukata ta zana** daya** mataki tare da yuwuwar `weight / totalWeight`; Ana ba da umarnin sauran matakan ta hanyar saukowa nauyi azaman sarkar fadowa don wannan buƙatar.
 - Matakin da nauyinsa ya kasance `0` (ko ya ɓace).** taba zana** yayin da kowane mataki yana da nauyin > 0 — zai iya zama koma baya bayan matakin da aka zana ya kasa. Sai lokacin** duka** Ma'aunin nauyi ne 0 zaɓin ya zama iri ɗaya.
-- Matakan da burinsu ba su samuwa — mai ba da kewayawa `OPEN`, sanyin haɗi, ƙirar kulle — ana cire su daga zane kafin ya faru (`open-sse/services/combo/targetResolution.ts`), don haka mataki ɗaya mai lafiya zai iya cin nasara na ɗan lokaci kowane buƙatu.
+- Matakan da burinsu ba su samuwa — mai ba da da'ira mai rarrabawa `OPEN`, sanyin haɗi, ƙirar kulle — ana cire su daga zane kafin ya faru (`open-sse/services/combo/targetResolution.ts`), don haka mataki ɗaya mai lafiya zai iya cin nasara na ɗan lokaci kowane buƙatu.
 - `stickyWeightedLimit` (tsarin haduwa, tsoho `1` = kashe) yana sanya matakin da aka zana don nasarorin da yawa a jere kafin sake zana.
 
 Don tsananin jujjuya amfani da `round-robin`; daidai ma'auni akan `weighted` suna ba da ƙididdiga — ba ma'aunin — mai tsauri ba.
@@ -341,6 +341,20 @@ Don tsananin jujjuya amfani da `round-robin`; daidai ma'auni akan `weighted` sun
 ### Yanayin bututun mai
 
 Haɗin `pipeline` tare da aƙalla samfura biyu na iya fita zuwa hanyar planner/executor tare da `config.agenticOrchestration.enabled`. Makasudin farko yana da tsare-tsare da amsoshi na ƙarshe; manufa ta biyu tana fitar da kiran kayan aiki na abokin ciniki. OmniRoute yana gano ci gaba da sakamakon kayan aiki daga ƙa'idar buƙatar, ya tambayi mai tsara ko ana buƙatar wani zagaye na kayan aiki, kuma yana mai da ko dai mai zartarwa ko mai tsarawa matakin ƙarshe na fuskantar abokin ciniki.
+
+`config.agenticOrchestration.contextCompaction` na zaɓi yana aiki daban-daban kasafin kuɗin biya kafin kowane mai tsarawa ko mai zartarwa aika. Kunna shi a sarari:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Waɗannan su ne jerin kasafin kuɗin halin JSON da mai aiki ya zaɓa, ba alamar mahallin mahallin windows ko garantin iyakoki na sama ba. Daidaitaccen samfurin IDs ya soke tsohowar. Sama da bakin kofa, ƙaddamarwa yana kawar da ma'anar kayan aiki iri ɗaya, yana gyara manyan shaidun kayan aiki tare da narkar da narke, kuma yana kawar da tsoffin rukunonin tarihi gabaɗaya zuwa maƙasudin manufa. Yana riƙe umarnin system/developer, buƙatun mai amfani na baya-bayan nan, zagayen kayan aiki na ƙarshe gami da layi ɗaya calls/results, da jagorar jagorar hanyar Gemini. Ana adana umarnin matakin sama da saitunan kayan aiki. Alamar tsallake bayanan da aka cire tarihin; wannan yanke hukunci ne, ba taƙaitaccen ma'ana ba. Idan mahallin da aka liƙa har yanzu ya wuce kasafin kuɗi, buƙatar ta dawo 413 kafin tuntuɓar samfurin. Tare da naƙasasshen ƙaddamarwa ko ƙasa da bakin kofa buƙatun ya wuce ba canzawa.
 
 A ci gaba da sakamakon kayan aiki, OmniRoute kuma yana dakatar da aiwatarwa lokacin da zagaye biyu da aka kammala a jere suna maimaita kiran kayan aiki iri ɗaya tare da sakamakon da bai canza ba, ko kuma lokacin da kowane sakamako da aka yiwa alama a zagaye biyu jere ya gaza. Canje-canjen sakamako yana ba da izinin kira akai-akai (misali, zabe). Mai gadin yana sake saita sabon buƙatun mai amfani, ƙungiyoyi masu layi ɗaya suna kira zuwa zagaye ɗaya, kuma suna goyan bayan Anthropic, Ƙarshen Taɗi, Amsoshi da tarihin Gemini. Mai tsarawa yana karɓar dalili kuma ya mallaki amsar ƙarshe ko da ta nemi wani zagaye na kayan aiki.
 
@@ -364,7 +378,7 @@ An shirya zagaye-robin, ba buƙatu ɗaya-kowane-mataki ba:
 
 - `stickyRoundRobinLimit` (combo config, sa'an nan `comboStickyRoundRobinLimit`, sa'an nan `settings.stickyRoundRobinLimit`, tsoho** 3** ) yana kiyaye manufa iri ɗaya don nasarorin da yawa a jere kafin juyawa. Saita jujjuyawar haɗakarwa zuwa `1` don jujjuyawar buƙatu ɗaya. Editan haɗakarwa yana nuna ingantaccen ƙima da wane Layer ya fito.
 - `connectionAwareExpansion` (saitin combo, sannan saituna, tsoho** karya** ) yana faɗaɗa kowane mataki-matakin mai bayarwa zuwa kowane maƙasudin asusun kafin juyawa. Dabarun rukuni-B (fififi, ma'auni, zagaye-robin, bazuwar, p2c, mafi ƙarancin amfani, ingantaccen farashi, lkgp, cika-farko, tsauraran-bazuwar, ingantaccen mahallin mahallin, ingantaccen cache-ingantacciyar hanya, mahallin-relay, fusion, bututun mai) kiyaye matakin matakin samarwa har sai an kunna wannan. Editan haduwa yana fallasa gadon / kunnawa / kashewa; gado yana amfani da tsohowar duniya (kashe).
-- Sauƙaƙan wuri na cache (`promptCacheAffinityEnabled`, tsoho** gaskiya** ) yana sake yin odar haɗin haɗin gwiwa don haka maɓallan cache masu dacewa su tsaya akan asusu ɗaya. Yana ɗaukar fifiko akan zagaye-robin da jujjuya nauyi a kan matakan kowane-asusu da aka liƙa. Kashe shi a ƙarƙashin Saitunan → Combo Predefinicións idan kuna buƙatar juyawa mai ƙarfi. Babu jujjuyawar kowane-hada.
+- Sauƙaƙan wuri na cache (`promptCacheAffinityEnabled`, tsoho** gaskiya** ) yana sake yin odar haɗin haɗin gwiwa don haka maɓallan cache masu dacewa su tsaya akan asusu ɗaya. Yana ɗaukar fifiko akan zagaye-robin da jujjuya nauyi a kan matakan da aka liƙa kowane-asusu. Kashe shi a ƙarƙashin Saitunan → Combo Predefinicións idan kuna buƙatar jujjuyawa mai ƙarfi. Babu jujjuyawar kowane-hada.
 
 Don jujjuya asusu da yawa akan ƙira ɗaya, fi so** mataki ɗaya mai ƙarfi-asusu** ( `connectionId` mara komai , dukan tafkin) tare da iyakacin `1`, ba ukun `connectionId` s ba. Matakan da aka liƙa tare da alaƙa suna rugujewa akan asusu ɗaya ko da yayin da lissafin RR ya ci gaba.
 

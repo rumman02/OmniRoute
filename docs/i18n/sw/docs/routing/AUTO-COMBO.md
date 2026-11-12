@@ -317,7 +317,7 @@ Injini ya kuchana ya OmniRoute inasaidia** Mikakati 20 ya uelekezaji** (imetanga
 | `least-used`        | Chagua lengo lenye mzigo wa chini kabisa wa sasa                                                                                                                                                        |
 | `cost-optimized`    | Punguza $ kwa kila ombi kutokana na bei ya katalogi                                                                                                                                                     |
 | `reset-aware` ⭐    | Weka kipaumbele kwa muda wa kuweka upya kiasi — madirisha mafupi ya kuweka upya nafasi ya juu                                                                                                           |
-| `reset-window`      | Pendelea malengo ambayo dirisha la mgao wake litawekwa upya hivi karibuni                                                                                                                               |
+| `reset-window`      | Pendelea malengo ambayo dirisha la mgao litawekwa upya hivi karibuni                                                                                                                                    |
 | `headroom`          | Chagua lengo ukitumia nafasi iliyobaki zaidi                                                                                                                                                            |
 | `quota-weighted`    | Ruka akaunti ambazo zimechoka, kisha uchague kati ya zilizosalia kwa uwiano wa kiasi kilichosalia kilichogawanywa na mzigo wa ndani ya ndege; mazungumzo yaliyopo yabaki yamebandikwa                   |
 | `strict-random`     | Nasibu bila kupunguzwa kwa marudio                                                                                                                                                                      |
@@ -332,7 +332,7 @@ Injini ya kuchana ya OmniRoute inasaidia** Mikakati 20 ya uelekezaji** (imetanga
 
 ### semantiki `weighted`
 
-`weighted` ni** mchoro wa nasibu sawia kwa kila ombi** (`open-sse/services/combo/targetSorters.ts` → `selectWeightedTarget`), sio kusawazisha:
+`weighted` ni** sawia random kuchora kwa kila ombi** (`open-sse/services/combo/targetSorters.ts` → `selectWeightedTarget`), sio kusawazisha:
 
 - Kila ombi huchota** moja** hatua yenye uwezekano `weight / totalWeight`; hatua zilizobaki zimeagizwa kwa kupunguza uzito kama mnyororo wa kurudi nyuma kwa ombi hilo.
 - Hatua ambayo uzito wake ni `0` (au kukosa) ni** kamwe inayotolewa** wakati hatua nyingine yoyote ina uzani > 0 — inaweza kutumika tu kama njia mbadala baada ya hatua iliyochorwa kutofaulu. Wakati tu** zote** uzani ni 0 je uteuzi huwa sawa.
@@ -344,6 +344,20 @@ Kwa mzunguko mkali tumia `round-robin`; uzani sawa kwenye `weighted` hutoa — y
 ### Hali ya bomba la mawakala
 
 Mchanganyiko `pipeline` wenye angalau miundo miwili unaweza kuchagua kuelekeza planner/executor kwa kutumia `config.agenticOrchestration.enabled`. Mlengwa wa kwanza anamiliki mipango na majibu ya mwisho; lengo la pili linatoa simu za zana asilia za mteja. OmniRoute hutambua mwendelezo wa matokeo ya zana kutoka kwa itifaki ya ombi, huuliza mpangaji ikiwa mzunguko mwingine wa zana unahitajika, na kwa nguvu humfanya mtekelezaji au mpangaji kuwa hatua ya mwisho inayomkabili mteja.
+
+`config.agenticOrchestration.contextCompaction` ya hiari hutumia bajeti tofauti ya upakiaji kabla ya kila mpangaji au mtekelezaji kutuma. Washa kwa uwazi:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Hizi ni bajeti za herufi JSON zilizochaguliwa mfululizo zilizochaguliwa na opereta, si madirisha ya muktadha wa tokeni au vikomo vilivyothibitishwa vya juu vya mkondo. Mfano halisi IDs unabatilisha chaguo-msingi. Juu ya kizingiti, mshikamano huondoa ufafanuzi wa zana unaofanana, hupunguza ushahidi wa zana uliozidi ukubwa kwa muhtasari, na kuondoa vikundi vya zamani vya historia kamili kuelekea uwiano unaolengwa. Huhifadhi maagizo ya system/developer, ombi la hivi punde la mtumiaji, duru ya mwisho ya zana ikijumuisha sambamba calls/results, na maagizo ya Gemini ya kuongoza. Maagizo ya kiwango cha juu na mipangilio ya zana huhifadhiwa. Alama iliyoachwa inarekodi historia iliyoondolewa; huu ni utatuzi wa kubainisha, sio muhtasari wa kisemantiki. Ikiwa muktadha uliobandikwa bado unazidi bajeti, ombi hurejesha 413 kabla ya kuwasiliana na modeli. Ufungaji ukiwa umezimwa au chini ya kizingiti ombi hupita bila kubadilika.
 
 Kwenye muendelezo wa matokeo ya zana, OmniRoute pia huacha utekelezaji wakati miduara miwili iliyokamilishwa ikirudia simu zile zile za zana bila kubadilishwa, au wakati kila matokeo yaliyowekwa alama katika mizunguko miwili mfululizo yaliposhindikana. Matokeo yaliyobadilishwa huruhusu simu zinazorudiwa (kwa mfano, upigaji kura). Mlinzi huweka upya ombi jipya la mtumiaji, hupanga simu sambamba katika mzunguko mmoja, na kuauni Anthropic, Ukamilishaji wa Gumzo, Majibu na historia za Gemini. Mpangaji hupokea sababu na anamiliki jibu la mwisho hata kama ataomba duru nyingine ya zana.
 
@@ -359,14 +373,14 @@ Aina za ziada baada ya lengo la pili zimeagizwa chelezo za watekelezaji. Jibu li
 }
 ```
 
-Mtekelezaji anaweza kutoa simu nyingi za kujitegemea katika jibu moja. Simu tegemezi hushughulikiwa katika zamu za matokeo ya zana za mteja baadaye, huku mpangaji akikagua kila matokeo. `maxToolRounds` chaguo-msingi kuwa `8` na inakubali `1`-`32`; inapofikiwa, mpangaji lazima atoe jibu bora zaidi la mwisho. Maamuzi ya mpangaji wa ndani yanaakibishwa, huku jibu linalomkabili mteja lililochaguliwa huhifadhi mapendeleo asilia ya utiririshaji.
+Mtekelezaji anaweza kutoa simu nyingi za kujitegemea katika jibu moja. Simu tegemezi hushughulikiwa katika zamu za matokeo ya zana za mteja baadaye, huku mpangaji akikagua kila matokeo. `maxToolRounds` chaguo-msingi kuwa `8` na inakubali `1`-`32`; ikifikiwa, mpangaji lazima atoe jibu bora zaidi la mwisho. Maamuzi ya mpangaji wa ndani yanaakibishwa, huku jibu linalomkabili mteja lililochaguliwa huhifadhi mapendeleo asilia ya utiririshaji.
 
 ### `round-robin` bechi nata na upanuzi wa akaunti
 
 Round-robin imeunganishwa, sio ombi moja kwa kila hatua:
 
 - `stickyRoundRobinLimit` (usanidi wa combo, kisha `comboStickyRoundRobinLimit`, kisha `settings.stickyRoundRobinLimit`, chaguo-msingi** 3** ) huweka lengo sawa kwa mafanikio hayo mengi mfululizo kabla ya kuzunguka. Weka ubatilishaji wa mchanganyiko kuwa `1` kwa mzunguko wa ombi moja. Kihariri cha mchanganyiko kinaonyesha thamani inayofaa na ni safu gani ilitoka.
-- `connectionAwareExpansion` (usanidi wa combo, kisha mipangilio, chaguo-msingi** uongo** ) huongeza kila hatua ya kiwango cha mtoa huduma hadi malengo ya kila akaunti kabla ya mzunguko. Mikakati ya Kundi-B (kipaumbele, uzani, duru-robin, nasibu, p2c, isiyotumika sana, iliyoboreshwa kwa gharama, lkgp, kujaza kwanza, bila mpangilio maalum, kuboreshwa kwa muktadha, uboreshaji wa akiba, upeanaji muktadha, muunganisho, bomba) weka mwonekano wa kiwango cha mtoa huduma hadi hii iwashwe. Mhariri wa combo anafichua kurithi / kuwasha / kuzima; inherit hutumia chaguo-msingi la kimataifa (kuzimwa).
+- `connectionAwareExpansion` (usanidi wa mchanganyiko, kisha mipangilio, chaguo-msingi** uongo** ) huongeza kila hatua ya kiwango cha mtoa huduma hadi malengo ya kila akaunti kabla ya mzunguko. Mikakati ya Kundi-B (kipaumbele, uzani, duru-robin, nasibu, p2c, isiyotumika sana, iliyoboreshwa kwa gharama, lkgp, kujaza kwanza, bila mpangilio maalum, kuboreshwa kwa muktadha, uboreshaji wa akiba, upeanaji muktadha, muunganisho, bomba) weka mwonekano wa kiwango cha mtoa huduma hadi hii iwashwe. Mhariri wa combo anafichua kurithi / kuwasha / kuzima; inherit hutumia chaguo-msingi la kimataifa (kuzimwa).
 - Uelekezaji wa eneo la akiba ya haraka (`promptCacheAffinityEnabled`, chaguo-msingi** kweli** ) hupanga upya miunganisho iliyobandikwa ili vitufe vinavyolingana vya akiba vibaki kwenye akaunti moja. Inachukua nafasi ya kwanza kuliko mzunguko wa robini na uzani katika hatua zilizobandikwa kwa kila akaunti. Izime chini ya Mipangilio → Combo chaguo-msingi ikiwa unahitaji mzunguko mkali. Hakuna ubatilishaji wa kila mseto.
 
 Kwa mzunguko wa akaunti nyingi kwenye mfano mmoja, pendelea** hatua moja ya akaunti-nguvu** ( `connectionId` tupu, bwawa zima) na kikomo cha kunata `1`, sio `connectionId` tatu zilizobandikwa. Hatua zilizobandikwa pamoja na mshikamano huanguka kwenye akaunti hiyo hiyo hata wakati kaunta ya RR ikiendelea.

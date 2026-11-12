@@ -327,6 +327,20 @@ Le haghaidh rothlú dian úsáid `round-robin`; meáchain comhionann ar `weighte
 
 Is féidir le teaglama `pipeline` ina bhfuil ar a laghad dhá shamhail rogha a dhéanamh de ródú planner/executor le `config.agenticOrchestration.enabled`. Is leis an gcéad sprioc na freagraí pleanála agus deiridh; scaoileann an dara sprioc glaonna uirlis dúchais cliant. Aimsíonn OmniRoute leanúint ar aghaidh le torthaí uirlisí ón bprótacal iarratais, fiafraíonn sé den phleanálaí an bhfuil gá le babhta uirlisí eile, agus go dinimiciúil déanann sé an seiceadóir nó an pleanálaí an chéim dheireanach os comhair an chliaint.
 
+Cuireann `config.agenticOrchestration.contextCompaction` roghnach buiséad pálasta ar leith i bhfeidhm roimh gach seolta pleanálaí nó seiceadóir. Cumasaigh go soiléir é:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Is buiséid srathaithe carachtar JSON iad seo a roghnaíonn an t-oibreoir, ní fuinneoga comhthéacs comharthacha ná teorainneacha réamhtheachtacha ráthaithe. Sáraíonn múnla cruinn IDs an réamhshocrú. Os cionn na tairsí, baintear sainmhínithe uirlisí comhionanna de bharr dhlúthú, gearrtar fianaise uirlisí rómhór le achoimre, agus baintear seanghrúpaí staire iomlána i dtreo an chóimheas sprice. Coinníonn sé treoracha system/developer, an t-iarratas úsáideora is déanaí, an babhta uirlisí deiridh lena n-áirítear comhthreomhar calls/results, agus príomh-threoir ródaithe Gemini. Coimeádtar treoracha ardleibhéil agus socruithe uirlisí. Taifeadann marcóir easnamh an stair bainte; scamhadh cinntitheach é seo, ní achoimre shéimeantach. Má sháraíonn an comhthéacs pinnáilte an buiséad fós, seolfaidh an t-iarratas 413 ar ais sula ndéantar teagmháil leis an tsamhail. Má bhíonn balcadh díchumasaithe nó faoi bhun na tairsí, téann an t-iarratas ar aghaidh gan athrú.
+
 Maidir le leanúint ar aghaidh le huirlisí-torthaí, cuireann OmniRoute stop leis an bhforghníomhú freisin nuair a athdhéantar na glaonna uirlise céanna le dhá bhabhta críochnaithe i ndiaidh a chéile agus torthaí gan athrú, nó nuair a theip ar gach toradh atá marcáilte go sainráite in dhá bhabhta as a chéile. Ceadaíonn torthaí athraithe glaonna arís agus arís eile (mar shampla, vótaíocht). Athshocraíonn an garda ar iarratas úr úsáideora, grúpálann sé glaonna comhthreomhar isteach i mbabhta amháin, agus tacaíonn sé le Anthropic, Críochnú Comhrá, Freagraí agus stair Gemini. Faigheann an pleanálaí an chúis agus is leis nó léi an freagra deiridh fiú má iarrann sé babhta uirlisí eile.
 
 Ordaítear samhlacha breise tar éis an dara sprioc cúltacaí seiceadóir. Téann freagra teipthe HTTP nó eisceacht iompair ar aghaidh chuig an gcéad seiceadóir eile, ag iompar an chinnidh phleanála chéanna agus na huirlisí dúchais céanna ach céim an tseiceadóra sin a nascadh pras agus réitithe. Cuirtear an chéad fhreagra rathúil ar ais gan athrú, lena n-áirítear sruthú SSE ; ní féidir teipeanna tar éis tosú sruth rathúil a chur ar ais anseo. Má theipeann ar gach seiceadóir, cuirtear an teip dheireanach ar ais. Stopann ginmhilleadh cliant le seoladh.
@@ -341,7 +355,7 @@ Ordaítear samhlacha breise tar éis an dara sprioc cúltacaí seiceadóir. Téa
 }
 ```
 
-Féadfaidh an seiceadóir glaonna neamhspleácha iolracha a astú in aon fhreagra amháin. Déileáiltear le glaonna cleithiúnacha i gcasálacha na gcliant-torthaí níos déanaí, agus déanann an pleanálaí athbhreithniú ar gach toradh. mainneachtainí `maxToolRounds` go `8` agus glacann sé `1`–`32`; Nuair a bheidh sé bainte amach, caithfidh an pleanálaí an freagra deiridh is fearr atá ar fáil a thabhairt. Déantar cinntí pleanála inmheánacha a mhaolánú, agus caomhnaíonn an freagra roghnaithe aghaidh ar an gcliant an bhunrogha sruthú.
+Féadfaidh an seiceadóir glaonna neamhspleácha iolracha a astú in aon fhreagra amháin. Déileáiltear le glaonna cleithiúnacha i gcasálacha na gcliant-torthaí níos déanaí, agus déanann an pleanálaí athbhreithniú ar gach toradh. mainneachtainí `maxToolRounds` go `8` agus glacann sé `1`–`32`; Nuair a bheidh sé bainte amach, caithfidh an pleanálaí an freagra deiridh is fearr atá ar fáil a thabhairt. Déantar cinntí pleanála inmheánacha a mhaolánú, agus coimeádann an freagra roghnaithe aghaidh ar an gcliant an bhunrogha sruthú.
 
 ### baisce greamaitheach `round-robin` agus leathnú cuntas
 
@@ -351,7 +365,7 @@ Is baisceáil an robáin bhabhta, ní aon iarratas amháin in aghaidh na céime:
 - `connectionAwareExpansion` (cumraíocht teaglama, ansin socruithe, réamhshocraithe** bréagach** ) leathnaíonn sé gach céim ar leibhéal an tsoláthraí go spriocanna in aghaidh an chuntais roimh an uainíocht. Straitéisí Grúpa-B (tosaíocht, ualaithe, bhabhta-robín, randamach, p2c, is lú úsáid, cost-optamaithe, lkgp, líonadh-an chéad, docht-randamach, comhthéacs-optamaithe, taisce-optamaithe, comhthéacs-seoladh, comhleá, píblíne) a choinneáil ar an leibhéal soláthraí go dtí go bhfuil sé seo ar siúl. Nochtann an t-eagarthóir teaglama oidhreacht / ar / as; Úsáideann inherit an réamhshocrú domhanda (as).
 - Ródú ceantair pras-taisce (`promptCacheAffinityEnabled`, réamhshocraithe** fíor** ) athordaíonn naisc phionnáilte ionas go bhfanann na heochracha taisce meaitseála ar aon chuntas amháin. Bíonn tús áite aige ar uainíocht bhabhta-robín agus ar rothlú ualaithe thar chéimeanna pinnithe in aghaidh an chuntais. Múch é faoi Socruithe → mainneachtainí teaglama má theastaíonn rothlú dian uait. Níl aon sárú in aghaidh na teaglama.
 
-Le haghaidh rothlú ilchuntais ar mhúnla amháin, is fearr** céim amháin dinimiciúil-chuntas** ( `connectionId` folamh, linn snámha iomlán) le teorainn greamaitheach `1`, ní trí `connectionId` pinned s. Titeann céimeanna pinned agus cleamhnas ar an gcuntas céanna fiú agus an cuntar RR ag dul chun cinn.
+Le haghaidh rothlú ilchuntais ar mhúnla amháin, is fearr** céim amháin dinimiciúil-chuntas** ( `connectionId` folamh, linn snámha ar fad) le teorainn greamaitheach `1`, ní trí pinned `connectionId` s. Titeann céimeanna pinned agus cleamhnas ar an gcuntas céanna fiú agus an cuntar RR ag dul chun cinn.
 
 ## Strataisí Fúnáise
 

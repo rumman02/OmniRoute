@@ -347,6 +347,20 @@ Griežtai sukimui naudokite `round-robin`; vienodi `weighted` svoriai suteikia s
 
 `pipeline` derinys su mažiausiai dviem modeliais gali pasirinkti planner/executor maršrutą su `config.agenticOrchestration.enabled`. Pirmajam taikiniui priklauso planavimas ir galutiniai atsakymai; antrasis tikslas siunčia kliento įrankio iškvietimus. OmniRoute aptinka įrankio rezultatų tęsinius iš užklausos protokolo, klausia planuotojo, ar reikalingas kitas įrankio ciklas, ir dinamiškai paverčia vykdytoją arba planuotoją galutiniu klientui skirtu žingsniu.
 
+Neprivaloma `config.agenticOrchestration.contextCompaction` taiko atskirą naudingosios apkrovos biudžetą prieš kiekvieną planuotojo ar vykdytojo išsiuntimą. Aiškiai įjunkite:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Tai yra nuoseklūs JSON simbolių biudžetai, kuriuos pasirenka operatorius, o ne prieigos rakto konteksto langai arba garantuoti viršutiniai apribojimai. Tikslus modelis IDs nepaiso numatytojo. Virš slenksčio sutankinimas pašalina identiškus įrankių apibrėžimus, apkarpo pernelyg didelius įrankio įrodymus su santrauka ir pašalina senas išsamias istorijos grupes, kad būtų pasiektas tikslinis santykis. Jame išsaugomos system/developer instrukcijos, naujausia vartotojo užklausa, paskutinis įrankio ciklas, įskaitant lygiagrečią calls/results, ir Gemini pagrindinė maršruto parinkimo instrukcija. Išsaugomos aukščiausio lygio instrukcijos ir įrankių nustatymai. Praleidimo žymeklis įrašo pašalintą istoriją; tai deterministinis apipjaustymas, o ne semantinė santrauka. Jei prisegtas kontekstas vis tiek viršija biudžetą, užklausa grąžina 413 prieš susisiekiant su modeliu. Kai sutankinimas išjungtas arba žemiau slenksčio, užklausa perduodama nepakitusi.
+
 Tęsiant įrankio rezultatą, OmniRoute taip pat sustabdo vykdymą, kai du iš eilės užbaigti raundai kartoja tuos pačius įrankio iškvietimus nepakitę rezultato arba kai kiekvienas aiškiai pažymėtas rezultatas per du raundus iš eilės nepavyko. Pasikeitę rezultatai leidžia pakartotinai skambinti (pavyzdžiui, apklausa). Apsauga iš naujo nustatoma pagal naują vartotojo užklausą, sugrupuoja lygiagrečius skambučius į vieną raundą ir palaiko Anthropic, pokalbių užbaigimus, atsakymus ir Gemini istorijas. Planuotojas gauna priežastį ir jam priklauso galutinis atsakymas, net jei jis prašo kito įrankio etapo.
 
 Papildomi modeliai po antrojo tikslo yra užsakomos vykdytojo atsarginės kopijos. Nesėkmingas HTTP atsakymas arba transportavimo išimtis perduodama kitam vykdytojui, turinčiam tą patį planuotojo sprendimą ir vietinius įrankius, tačiau paties vykdytojo veiksmų raginimas ir išspręstas ryšys. Pirmasis sėkmingas atsakymas grąžinamas nepakeistas, įskaitant SSE srautinį perdavimą; gedimų po sėkmingo srauto pradžios čia negalima bandyti iš naujo. Jei nepavyksta visiems vykdytojams, grąžinamas paskutinis gedimas. Klientas nutraukia siuntimo sustabdymą.
@@ -369,7 +383,7 @@ Apklausa vykdoma grupėmis, o ne viena užklausa per žingsnį:
 
 - `stickyRoundRobinLimit` (kombinuota konfigūracija, tada `comboStickyRoundRobinLimit`, tada `settings.stickyRoundRobinLimit`, numatytoji** 3** ) išlaiko tą patį tikslą daugeliui sėkmingų iš eilės prieš pakeitimą. Nustatykite kombinuotąjį nepaisymą į `1`, kad pasuktumėte vieną užklausą. Kombinuotasis redaktorius rodo efektyvią vertę ir iš kurio sluoksnio ji atsirado.
 - `connectionAwareExpansion` (kombinuota konfigūracija, tada nustatymai, numatytoji** klaidinga** ) išplečia kiekvieną teikėjo lygio veiksmą į kiekvienos paskyros tikslus prieš rotaciją. B grupės strategijos (prioritetinis, svertinis, apvalus, atsitiktinis, p2c, mažiausiai naudojamas, optimizuotas sąnaudas, lkgp, užpildymas pirmiausia, griežtas atsitiktinis, optimizuotas pagal kontekstą, optimizuotas talpykloje, konteksto perdavimas, suliejimas, konvejerinis) išlaiko tiekėjo lygio vaizdą, kol ši funkcija neįjungta. Kombinuotas redaktorius atskleidžia paveldėti / įjungti / išjungti; paveldėti naudoja visuotinę numatytąją reikšmę (išjungta).
-- Greitosios talpyklos vietovės maršruto parinkimas (`promptCacheAffinityEnabled`, numatytasis** tiesa** ) pertvarko prisegtus ryšius, kad atitiktų talpyklos raktai liktų vienoje paskyroje. Ji turi viršenybę prieš apvalų ir svertinį sukimąsi per prisegtus paskyros veiksmus. Išjunkite jį skiltyje Nustatymai → Combo numatytieji nustatymai, jei reikia griežto pasukimo. Nėra derinio nepaisymo.
+- Prompt-cache vietovės maršruto parinkimas (`promptCacheAffinityEnabled`, numatytasis** tiesa** ) pertvarko prisegtus ryšius, kad atitiktų talpyklos raktai liktų vienoje paskyroje. Ji turi viršenybę prieš apvalų ir svertinį sukimąsi per prisegtus paskyros veiksmus. Išjunkite jį skiltyje Nustatymai → Combo numatytieji nustatymai, jei reikia griežto pasukimo. Nėra derinio nepaisymo.
 
 Pirmenybė teikiama kelių paskyrų rotacijai viename modelyje** vienas dinaminės paskyros veiksmas** (tuščias `connectionId`, visas baseinas) su lipnios ribos `1`, o ne trimis prisegtais `connectionId` s. Prisegti žingsniai ir giminingumas susitraukia į tą pačią paskyrą, net kai RR skaitiklis juda į priekį.
 

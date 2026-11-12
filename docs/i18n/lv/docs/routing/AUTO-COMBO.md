@@ -289,7 +289,7 @@ OmniRoute kombinēto dzinēju atbalsta** 20 maršrutēšanas stratēģijas** (de
 | :------------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `priority`          | Pirmā mērķa sakārtotais saraksts ar skaidru prioritāti                                                                                                                                                                        |
 | `weighted`          | Svērts nejauši pēc mērķa svara                                                                                                                                                                                                |
-| `round-robin`       | Pārvietojieties cauri mērķiem secībā (grupēti; skatīt zemāk)                                                                                                                                                                  |
+| `round-robin`       | Pārvietojieties cauri mērķiem secībā (paketē; skatīt zemāk)                                                                                                                                                                   |
 | `context-relay`     | Nododiet kontekstu starp mērķiem (garas sarunas)                                                                                                                                                                              |
 | `fill-first`        | Pirms pāriet uz nākamo, aizpildiet katra mērķa kvotu                                                                                                                                                                          |
 | `p2c`               | Power-of-2-choices nejauša slodzes balansēšana                                                                                                                                                                                |
@@ -324,6 +324,20 @@ Stingrai rotācijai izmantojiet `round-robin`; vienādi svari uz `weighted` snie
 ### Aģenta konveijera režīms
 
 `pipeline` kombinācija ar vismaz diviem modeļiem var izvēlēties planner/executor maršrutēšanu ar `config.agenticOrchestration.enabled`. Pirmajam mērķim pieder plānošana un galīgās atbildes; otrais mērķis izstaro klienta vietējo rīku zvanus. OmniRoute nosaka rīka rezultāta turpinājumus no pieprasījuma protokola, jautā plānotājam, vai ir nepieciešama vēl viena rīka kārta, un dinamiski padara izpildītāju vai plānotāju par pēdējo soli, kas vērsts uz klientu.
+
+Izvēles `config.agenticOrchestration.contextCompaction` piemēro atsevišķu kravnesības budžetu pirms katra plānotāja vai izpildītāja nosūtīšanas. Iespējojiet to tieši:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Tie ir serializēti JSON rakstzīmju budžeti, ko atlasījis operators, nevis marķiera konteksta logi vai garantēti augšējie ierobežojumi. Precīzs modelis IDs ignorē noklusējuma iestatījumu. Virs sliekšņa, sablīvēšana noņem identiskas rīku definīcijas, apgriež pārāk lielus rīku pierādījumus ar īssavilkumu un noņem vecās pilnīgas vēstures grupas, lai sasniegtu mērķa attiecību. Tajā tiek saglabātas system/developer instrukcijas, jaunākais lietotāja pieprasījums, pēdējā rīka kārta, ieskaitot paralēlo calls/results, un Gemini vadošā maršrutēšanas instrukcija. Tiek saglabātas augstākā līmeņa instrukcijas un rīku iestatījumi. Izlaiduma marķieris ieraksta noņemto vēsturi; šī ir deterministiska apgriešana, nevis semantisks kopsavilkums. Ja piespraustais konteksts joprojām pārsniedz budžetu, pieprasījums atgriež 413 pirms sazināšanās ar modeli. Ja blīvēšana ir atspējota vai zem sliekšņa, pieprasījums tiek nosūtīts nemainīgs.
 
 Rīka rezultāta turpinājumā OmniRoute aptur izpildi arī tad, ja divas secīgas pabeigtas kārtas atkārto vienu un to pašu rīka izsaukumu ar nemainīgiem rezultātiem vai ja katrs skaidri atzīmētais rezultāts divās secīgās kārtās ir neveiksmīgs. Mainīti rezultāti ļauj veikt atkārtotus zvanus (piemēram, aptauju). Aizsargs tiek atiestatīts pēc jauna lietotāja pieprasījuma, grupē paralēlos zvanus vienā kārtā un atbalsta Anthropic, tērzēšanas pabeigšanas, atbildes un Gemini vēstures. Plānotājs saņem iemeslu un viņam pieder galīgā atbilde, pat ja tas pieprasa citu rīku kārtu.
 

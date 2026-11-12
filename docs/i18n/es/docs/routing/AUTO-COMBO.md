@@ -309,7 +309,7 @@ El motor combinado de OmniRoute es compatible** 20 estrategias de enrutamiento**
 | :------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `priority`          | Lista ordenada del primer objetivo con prioridad explícita                                                                                                                                                                      |
 | `weighted`          | Ponderado aleatoriamente por peso por objetivo                                                                                                                                                                                  |
-| `round-robin`       | Recorrer los objetivos en orden (por lotes; ver más abajo)                                                                                                                                                                      |
+| `round-robin`       | Recorrer los objetivos en orden (en lotes; ver más abajo)                                                                                                                                                                       |
 | `context-relay`     | Transmitir contexto entre objetivos (conversaciones largas)                                                                                                                                                                     |
 | `fill-first`        | Llene la cuota de cada objetivo antes de pasar al siguiente                                                                                                                                                                     |
 | `p2c`               | equilibrio de carga aleatorio Power-of-2-choices                                                                                                                                                                                |
@@ -345,6 +345,20 @@ Para una rotación estricta, utilice `round-robin`; pesos iguales en `weighted` 
 
 Un combo `pipeline` con al menos dos modelos puede optar por el enrutamiento planner/executor con `config.agenticOrchestration.enabled`. El primer objetivo posee planificación y respuestas finales; el segundo objetivo emite llamadas a herramientas nativas del cliente. OmniRoute detecta la continuación de los resultados de la herramienta a partir del protocolo de solicitud, pregunta al planificador si se necesita otra ronda de herramientas y dinámicamente hace que el ejecutor o el planificador sean el paso final de cara al cliente.
 
+`config.agenticOrchestration.contextCompaction` opcional aplica un presupuesto de carga útil separado antes del envío de cada planificador o ejecutor. Habilítelo explícitamente:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Estos son presupuestos de caracteres JSON serializados seleccionados por el operador, no ventanas de contexto de token ni límites ascendentes garantizados. El modelo exacto IDs anula el predeterminado. Por encima del umbral, la compactación elimina definiciones de herramientas idénticas, recorta la evidencia de herramientas de gran tamaño con un resumen y elimina los grupos históricos completos antiguos hacia la proporción objetivo. Conserva las instrucciones de system/developer, la última solicitud del usuario, la última ronda de herramientas que incluye calls/results paralelo y la instrucción de enrutamiento principal de Gemini. Se conservan las instrucciones de nivel superior y la configuración de herramientas. Un marcador de omisión registra el historial eliminado; Este es un recorte determinista, no un resumen semántico. Si el contexto fijado aún excede el presupuesto, la solicitud devuelve 413 antes de contactar al modelo. Con la compactación deshabilitada o por debajo del umbral, la solicitud pasa sin cambios.
+
 En las continuaciones de resultados de herramientas, OmniRoute también detiene la ejecución cuando dos rondas completas consecutivas repiten las mismas llamadas a herramientas sin cambios, o cuando todos los resultados marcados explícitamente en dos rondas consecutivas fallaron. Los resultados modificados permiten llamadas repetidas (por ejemplo, sondeos). La guardia se reinicia ante una nueva solicitud de usuario, agrupa llamadas paralelas en una ronda y admite Anthropic, finalizaciones de chat, respuestas e historiales Gemini. El planificador recibe el motivo y es dueño de la respuesta final incluso si solicita otra ronda de herramientas.
 
 Los modelos adicionales después del segundo objetivo son copias de seguridad de ejecutores ordenados. Una respuesta HTTP fallida o una excepción de transporte avanza al siguiente ejecutor, llevando la misma decisión del planificador y herramientas nativas, pero el propio paso del ejecutor y la conexión resuelta. La primera respuesta exitosa se devuelve sin cambios, incluida la transmisión SSE ; Los fallos después de que se inicie una transmisión exitosa no se pueden volver a intentar aquí. Si todos los ejecutores fallan, se devuelve el último error. El cliente cancela la detención del envío.
@@ -363,9 +377,9 @@ El ejecutor puede emitir múltiples llamadas independientes en una sola respuest
 
 ### lote adhesivo `round-robin` y expansión de cuenta
 
-El round robin es por lotes, no una solicitud por paso:
+El round-robin es por lotes, no una solicitud por paso:
 
-- `stickyRoundRobinLimit` (configuración combinada, luego `comboStickyRoundRobinLimit`, luego `settings.stickyRoundRobinLimit`, predeterminado** 3** ) mantiene el mismo objetivo durante esa cantidad de éxitos consecutivos antes de rotar. Establezca la anulación combinada en `1` para una rotación de una solicitud. El editor combinado muestra el valor efectivo y de qué capa proviene.
+- `stickyRoundRobinLimit` (configuración combinada, luego `comboStickyRoundRobinLimit`, luego `settings.stickyRoundRobinLimit`, predeterminado** 3** ) mantiene el mismo objetivo durante esa cantidad de éxitos consecutivos antes de rotar. Establezca la anulación combinada en `1` para una rotación de una sola solicitud. El editor combinado muestra el valor efectivo y de qué capa proviene.
 - `connectionAwareExpansion` (configuración combinada, luego configuración, predeterminada** FALSO** ) expande cada paso a nivel de proveedor a objetivos por cuenta antes de la rotación. Las estrategias del grupo B (prioridad, ponderada, round-robin, aleatoria, p2c, menos utilizada, de costo optimizado, lkgp, llenado primero, aleatoria estricta, optimizada por contexto, optimizada por caché, retransmisión de contexto, fusión, canalización) mantienen una vista a nivel de proveedor hasta que esté activada. El editor combinado expone heredar/activar/desactivar; heredar utiliza el valor predeterminado global (desactivado).
 - Enrutamiento de localidad de caché de solicitud (`promptCacheAffinityEnabled`, predeterminado** verdadero** ) reordena las conexiones fijadas para que las claves de caché coincidentes permanezcan en una cuenta. Tiene prioridad sobre la rotación por turnos y la rotación ponderada en los pasos fijados por cuenta. Desactívelo en Configuración → Combo defaults si necesita una rotación estricta. No hay anulación por combo.
 

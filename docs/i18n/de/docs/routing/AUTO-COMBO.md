@@ -305,7 +305,7 @@ Die Combo-Engine von OmniRoute unterstützt** 20 Routing-Strategien** (deklarier
 | :------------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `priority`          | Geordnete Liste des ersten Ziels mit expliziter Priorität                                                                                                                                                                                 |
 | `weighted`          | Zufällig gewichtet nach Gewicht pro Ziel                                                                                                                                                                                                  |
-| `round-robin`       | Ziele der Reihe nach durchgehen (stapelweise; siehe unten)                                                                                                                                                                                |
+| `round-robin`       | Durchlaufen Sie die Ziele der Reihe nach (stapelweise; siehe unten).                                                                                                                                                                      |
 | `context-relay`     | Übergeben Sie den Kontext zielübergreifend (lange Gespräche)                                                                                                                                                                              |
 | `fill-first`        | Füllen Sie die Quote jedes Ziels aus, bevor Sie zum nächsten übergehen                                                                                                                                                                    |
 | `p2c`               | Power-of-2-choices zufälliger Lastausgleich                                                                                                                                                                                               |
@@ -315,7 +315,7 @@ Die Combo-Engine von OmniRoute unterstützt** 20 Routing-Strategien** (deklarier
 | `reset-aware` ⭐    | Priorisieren Sie nach Kontingent-Reset-Zeit — Kurze Reset-Fenster werden höher eingestuft                                                                                                                                                 |
 | `reset-window`      | Bevorzugen Sie Ziele, deren Quotenfenster am schnellsten zurückgesetzt wird                                                                                                                                                               |
 | `headroom`          | Wählen Sie das Ziel mit dem größten verbleibenden Quotenspielraum aus                                                                                                                                                                     |
-| `quota-weighted`    | Überspringen Sie erschöpfte Konten und wählen Sie dann aus dem Rest im Verhältnis zur verbleibenden Quote dividiert durch die Fluglast aus; Bestehende Konversationen bleiben angepinnt                                                   |
+| `quota-weighted`    | Überspringen Sie erschöpfte Konten und wählen Sie dann im Verhältnis zum verbleibenden Kontingent dividiert durch die Fluglast aus dem Rest aus; Bestehende Konversationen bleiben angepinnt                                              |
 | `strict-random`     | Zufällig ohne Deduplizierung von Wiederholungen                                                                                                                                                                                           |
 | `auto`              | Verwenden Sie die automatische Kombinationsbewertung (16-Faktor) —** empfohlen**                                                                                                                                                          |
 | `lkgp`              | Last-Known-Good-Pfad (wird an den letzten erfolgreichen Anbieter angeheftet und greift dann auf die Regeln zurück)                                                                                                                        |
@@ -330,8 +330,8 @@ Die Combo-Engine von OmniRoute unterstützt** 20 Routing-Strategien** (deklarier
 
 `weighted` ist ein** proportionale Zufallsziehung pro Anfrage** (`open-sse/services/combo/targetSorters.ts` → `selectWeightedTarget`), kein Equalizer:
 
-- Jede Anfrage zieht** eins** Schritt mit Wahrscheinlichkeit `weight / totalWeight`; Die verbleibenden Schritte sind nach absteigender Gewichtung als Fallback-Kette für diese Anfrage geordnet.
-- Ein Schritt, dessen Gewicht `0` ist (oder fehlt).** nie gezeichnet** Während jeder andere Schritt ein Gewicht > 0 — hat, kann er nur als Ersatz dienen, nachdem der gezeichnete Schritt fehlschlägt. Nur wann** alle** Gewichte sind 0, wird die Auswahl einheitlich.
+- Jede Anfrage zieht** eins** Schritt mit Wahrscheinlichkeit `weight / totalWeight`; Die verbleibenden Schritte werden nach absteigender Gewichtung als Fallback-Kette für diese Anfrage geordnet.
+- Ein Schritt, dessen Gewicht `0` ist (oder fehlt).** nie gezeichnet** Während jeder andere Schritt ein Gewicht > 0 — hat, kann er nur als Fallback dienen, nachdem der gezeichnete Schritt fehlschlägt. Nur wann** alle** Gewichte sind 0, wird die Auswahl einheitlich.
 - Schritte, deren Ziele alle nicht verfügbar sind — Provider Circuit Breaker `OPEN`, Verbindungsabklingzeit, Modellsperre — werden aus der Verlosung entfernt, bevor sie geschieht (`open-sse/services/combo/targetResolution.ts`), sodass ein einzelner fehlerfreier Schritt vorübergehend jede Anfrage gewinnen kann.
 - `stickyWeightedLimit` (Combo-Konfiguration, Standard `1` = aus) fixiert den gezeichneten Schritt für so viele aufeinanderfolgende Erfolge, bevor er erneut gezeichnet wird.
 
@@ -340,6 +340,20 @@ Für eine strikte Rotation verwenden Sie `round-robin`; Gleiche Gewichtungen auf
 ### Agentischer Pipeline-Modus
 
 Eine `pipeline` Kombination mit mindestens zwei Modellen kann sich mit `config.agenticOrchestration.enabled` für planner/executor Routing entscheiden. Das erste Ziel besitzt Planung und endgültige Antworten; Das zweite Ziel gibt client-native Toolaufrufe aus. OmniRoute erkennt Werkzeugergebnisfortsetzungen aus dem Anforderungsprotokoll, fragt den Planer, ob eine weitere Werkzeugrunde erforderlich ist, und macht entweder den Ausführenden oder den Planer dynamisch zum letzten Schritt für den Kunden.
+
+Optional wendet `config.agenticOrchestration.contextCompaction` vor jedem Planer- oder Ausführendenversand ein separates Nutzlastbudget an. Aktivieren Sie es explizit:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Hierbei handelt es sich um vom Bediener ausgewählte serialisierte JSON Zeichenbudgets, nicht um Token-Kontextfenster oder garantierte Upstream-Grenzwerte. Das genaue Modell IDs überschreibt die Standardeinstellung. Oberhalb des Schwellenwerts entfernt die Komprimierung identische Werkzeugdefinitionen, schneidet übergroße Werkzeugnachweise mit einem Digest ab und entfernt alte vollständige Verlaufsgruppen in Richtung des Zielverhältnisses. Es speichert system/developer -Anweisungen, die letzte Benutzeranfrage, die letzte Tool-Runde einschließlich parallelem calls/results und die führende Routing-Anweisung von Gemini. Anweisungen und Werkzeugeinstellungen der obersten Ebene bleiben erhalten. Eine Auslassungsmarkierung zeichnet den entfernten Verlauf auf; Dies ist eine deterministische Kürzung, keine semantische Zusammenfassung. Wenn der angeheftete Kontext immer noch das Budget überschreitet, gibt die Anfrage 413 zurück, bevor das Modell kontaktiert wird. Wenn die Komprimierung deaktiviert ist oder unter dem Schwellenwert liegt, wird die Anfrage unverändert weitergeleitet.
 
 Bei Werkzeugergebnisfortsetzungen stoppt OmniRoute auch die Ausführung, wenn zwei aufeinanderfolgende abgeschlossene Runden dieselben Werkzeugaufrufe mit unveränderten Ergebnissen wiederholen oder wenn jedes explizit markierte Ergebnis in zwei aufeinanderfolgenden Runden fehlschlägt. Veränderte Ergebnisse ermöglichen wiederholte Aufrufe (z. B. Polling). Der Wächter wird bei einer neuen Benutzeranfrage zurückgesetzt, gruppiert parallele Anrufe in einer Runde und unterstützt Anthropic, Chat-Abschlüsse, Antworten und Gemini Verläufe. Der Planer erhält den Grund und besitzt die endgültige Antwort, auch wenn er eine weitere Werkzeugrunde anfordert.
 
@@ -362,7 +376,7 @@ Der Ausführende kann in einer Antwort mehrere unabhängige Aufrufe ausgeben. Ab
 Round-Robin erfolgt stapelweise, nicht eine Anfrage pro Schritt:
 
 - `stickyRoundRobinLimit` (Combo-Konfiguration, dann `comboStickyRoundRobinLimit`, dann `settings.stickyRoundRobinLimit`, Standard** 3** ) behält das gleiche Ziel für so viele aufeinanderfolgende Erfolge bei, bevor es rotiert. Legen Sie die Combo-Überschreibung für eine Rotation mit einer Anforderung auf `1` fest. Der Combo-Editor zeigt den effektiven Wert und die Ebene an, aus der er stammt.
-- `connectionAwareExpansion` (Combo-Konfiguration, dann Einstellungen, Standard** FALSCH** ) erweitert jeden Schritt auf Anbieterebene vor der Rotation in Ziele pro Konto. Gruppen-B-Strategien (Priorität, gewichtet, Round-Robin, zufällig, P2C, am wenigsten verwendet, kostenoptimiert, LKGP, Fill-First, streng zufällig, kontextoptimiert, Cache-optimiert, Kontext-Relay, Fusion, Pipeline) behalten eine Ansicht auf Anbieterebene bei, bis diese Option aktiviert ist. Der Combo-Editor macht inherit / on / off verfügbar; Inherit verwendet die globale Standardeinstellung (aus).
+- `connectionAwareExpansion` (Combo-Konfiguration, dann Einstellungen, Standard** FALSCH** ) erweitert jeden Schritt auf Anbieterebene vor der Rotation in Ziele pro Konto. Gruppen-B-Strategien (Priorität, gewichtet, Round-Robin, zufällig, P2C, am wenigsten verwendet, kostenoptimiert, LKGP, Fill-First, streng zufällig, kontextoptimiert, Cache-optimiert, Kontext-Relay, Fusion, Pipeline) behalten eine Ansicht auf Anbieterebene bei, bis diese Option aktiviert ist. Der Combo-Editor stellt inherit / on / off bereit; Inherit verwendet die globale Standardeinstellung (aus).
 - Prompt-Cache-Lokalitätsrouting (`promptCacheAffinityEnabled`, Standard).** WAHR** ) ordnet angeheftete Verbindungen neu an, sodass übereinstimmende Cache-Schlüssel auf einem Konto verbleiben. Es hat Vorrang vor Round-Robin und der gewichteten Rotation über festgelegte Schritte pro Konto. Deaktivieren Sie es unter „Einstellungen → Combo-Standardeinstellungen“, wenn Sie eine strikte Rotation benötigen. Es gibt keine Überschreibung pro Kombination.
 
 Für die Rotation mehrerer Konten auf einem Modell bevorzugen Sie** ein dynamischer Kontoschritt** (leerer `connectionId`, ganzer Pool) mit Sticky-Limit `1`, nicht drei fixierten `connectionId` s. Angepinnte Schritte und Affinität fallen auf dasselbe Konto, auch wenn der RR Zähler weiterläuft.

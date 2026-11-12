@@ -191,7 +191,7 @@ src/
 | `memory/`                                | Danışıq yaddaşı (SQLite FTS5 + sqlite-vec hibrid RRF + Qdrant tier 2) — bax `docs/frameworks/MEMORY.md`                                                                                                                                                                                                                      |
 | `memory/embedding/`                      | Çox mənbəli yerləşdirmə təbəqəsi: `index.ts` (həlledici), `remote.ts`, `staticPotion.ts`, `transformersLocal.ts`, `cache.ts`, `types.ts` (plan 21)                                                                                                                                                                           |
 | `memory/vectorStore.ts`                  | sqlite-vec v0.1.9 sarğı — KNN brute-force + hibrid RRF (FTS5 + vektor, k = 60). Lazy-init, sqlite-vec əlçatan olmadıqda qəşəng şəkildə pisləşir. (plan 21)                                                                                                                                                                   |
-| `memory/reindex.ts`                      | `runReindexBatch()` — fonda `needs_reindex=1` ilə xatirələri emal edir; `POST /api/memory/reindex` və lazy-backfill yolu ilə çağırılır. (plan 21)                                                                                                                                                                            |
+| `memory/reindex.ts`                      | `runReindexBatch()` — fonda `needs_reindex=1` ilə xatirələri emal edir; `POST /api/memory/reindex` və tənbəl doldurma yolu ilə çağırılır. (plan 21)                                                                                                                                                                          |
 | `monitoring/`                            | Sağlamlıq yoxlamaları, emissiya göstəriciləri                                                                                                                                                                                                                                                                                |
 | `oauth/`                                 | 22 provayder modulu üçün OAuth/import axınları (agy, antigravity, claude, cline, codebuddy-cn, codex, cursor, devin-desktop, ghe-copilot, github, gitlab-duo, grok-cli-oauth, grok-cli, kilocode, kimi-coding, xaith, open, traference, kiro, qoith, zed-hosted, zed)                                                        |
 | `plugins/`                               | Plugin reyestri                                                                                                                                                                                                                                                                                                              |
@@ -242,7 +242,7 @@ src/
 | -------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `components/`                    | Dashboard komponenti API: `packages/ui-kit` — üzərində adapterlər bax `docs/architecture/DESIGN_SYSTEM.md` |
 | `constants/iconMap.ts`           | `ICON_MAP`: ekranlar tərəfindən istifadə edilən ikon adları → Lucide komponentləri (`<Icon>`)              |
-| `constants/providers.ts`         | **381 provayder** Zod təsdiqi ilə (həqiqət mənbəyi)                                                        |
+| `constants/providers.ts`         | **388 provayder** Zod təsdiqi ilə (həqiqət mənbəyi)                                                        |
 | `constants/cliTools.ts`          | Xarici CLI alət reyestri                                                                                   |
 | `constants/routingStrategies.ts` | **20 marşrutlaşdırma strategiyası** prioritetləri ilə                                                      |
 | `constants/publicApiRoutes.ts`   | Daşıyıcının (idarəçiyə qarşı) auth tələb edən marşrutlar                                                   |
@@ -395,24 +395,24 @@ open-sse/
 
 ### Yüksək səviyyəli bələdçilər
 
-| Dok                         | Məqsəd                                                                                     |
-| --------------------------- | ------------------------------------------------------------------------------------------ |
-| `ARCHITECTURE.md`           | Yüksək səviyyəli arxitektura, alt sistem xəritəsi, tablosunun səthi                        |
-| `CODEBASE_DOCUMENTATION.md` | Mühəndislik arayışı: kataloqlar, modullar, konvensiyalar                                   |
-| `FEATURES.md`               | v3.8 məqamları ilə funksiya matrisi                                                        |
-| `USER_GUIDE.md`             | Son istifadəçi təlimatı (quraşdırma, modellər, kombinlər, CLIs, audio və s.)               |
-| `API_REFERENCE.md`          | auth modeli ilə API son nöqtə istinadı                                                     |
-| `openapi.yaml`              | OpenAPI 3.0 spesifikasiyası (121 yol)                                                      |
-| `SETUP_GUIDE.md`            | Quraşdırma üsulları (npm, npx, Docker, Electron, Termux, mənbə)                            |
-| `ENVIRONMENT.md`            | Bütün env variantları (~ 800 sənədləşdirilmiş, ~ 3,050 sətir `.env.example`)               |
-| `TROUBLESHOOTING.md`        | Ümumi səhvlər + v3.8.0 məlum məsələlər                                                     |
-| `RELEASE_CHECKLIST.md`      | Tam buraxılış axını (bacarıqlar, husky, şərti öhdəliklər, yerləşdirmə)                     |
-| `COVERAGE_PLAN.md`          | Əhatə məqsədləri və cari vəziyyət                                                          |
-| `FREE_TIERS.md`             | Seçilmiş pulsuz səviyyəli provayderlər (48 + pulsuz + 11 OAuth)                            |
-| `CLI-TOOLS.md`              | Xarici CLI inteqrasiyaları + Daxili OmniRoute CLI                                          |
-| `I18N.md`                   | i18n memarlığı, dil əlavə etmək, 67 yerli                                                  |
-| `UNINSTALL.md`              | Silinmə addımlarını təmizləyin                                                             |
-| `PROVIDER_REFERENCE.md`     | **Avtomatik yaradıldı** 381 provayderin kataloqu (regen: `npm run gen:provider-reference`) |
+| Dok                         | Məqsəd                                                                                   |
+| --------------------------- | ---------------------------------------------------------------------------------------- |
+| `ARCHITECTURE.md`           | Yüksək səviyyəli arxitektura, alt sistem xəritəsi, tablosunun səthi                      |
+| `CODEBASE_DOCUMENTATION.md` | Mühəndislik arayışı: kataloqlar, modullar, konvensiyalar                                 |
+| `FEATURES.md`               | v3.8 məqamları ilə funksiya matrisi                                                      |
+| `USER_GUIDE.md`             | Son istifadəçi təlimatı (quraşdırma, modellər, kombinlər, CLIs, audio və s.)             |
+| `API_REFERENCE.md`          | auth modeli ilə API son nöqtə istinadı                                                   |
+| `openapi.yaml`              | OpenAPI 3.0 spesifikasiyası (121 yol)                                                    |
+| `SETUP_GUIDE.md`            | Quraşdırma üsulları (npm, npx, Docker, Electron, Termux, mənbə)                          |
+| `ENVIRONMENT.md`            | Bütün env variantları (~ 800 sənədləşdirilmiş, ~ 3,050 sətir `.env.example`)             |
+| `TROUBLESHOOTING.md`        | Ümumi səhvlər + v3.8.0 məlum məsələlər                                                   |
+| `RELEASE_CHECKLIST.md`      | Tam buraxılış axını (bacarıqlar, husky, şərti öhdəliklər, yerləşdirmə)                   |
+| `COVERAGE_PLAN.md`          | Əhatə məqsədləri və cari vəziyyət                                                        |
+| `FREE_TIERS.md`             | Seçilmiş pulsuz səviyyəli provayderlər (48 + pulsuz + 11 OAuth)                          |
+| `CLI-TOOLS.md`              | Xarici CLI inteqrasiyaları + Daxili OmniRoute CLI                                        |
+| `I18N.md`                   | i18n memarlığı, dil əlavə etmək, 67 yerli                                                |
+| `UNINSTALL.md`              | Silinmə addımlarını təmizləyin                                                           |
+| `PROVIDER_REFERENCE.md`     | **Avtomatik yaradıldı** 388 provayder kataloqu (regen: `npm run gen:provider-reference`) |
 
 ### Altsistem dərin dalışlar
 

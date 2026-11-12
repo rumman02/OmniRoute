@@ -315,13 +315,27 @@ Il motore combinato di OmniRoute supporta** 20 strategie di routing** (dichiarat
 - Ogni richiesta attira** uno** passo con probabilità `weight / totalWeight`; i passaggi rimanenti vengono ordinati in base al peso decrescente come catena di fallback per quella richiesta.
 - Un passo il cui peso è `0` (o mancante) lo è** mai disegnato** mentre qualsiasi altro passo ha un peso > 0 — può servire solo come fallback dopo che il passo disegnato fallisce. Solo quando** Tutto** i pesi sono 0 la selezione diventa uniforme.
 - I passaggi i cui obiettivi sono tutti non disponibili — interruttore automatico del fornitore `OPEN`, raffreddamento della connessione, blocco del modello — vengono rimossi dall'estrazione prima che avvenga (`open-sse/services/combo/targetResolution.ts`), quindi un singolo passaggio integro può vincere temporaneamente ogni richiesta.
-- `stickyWeightedLimit` (combo config, default `1` = off) blocca il passaggio disegnato per quel numero di successi consecutivi prima di ridisegnare.
+- `stickyWeightedLimit` (combo config, default `1` = off) blocca il passaggio disegnato per quel numero di successi consecutivi prima di rieseguire il disegno.
 
 Per una rotazione rigorosa utilizzare `round-robin`; pesi uguali su `weighted` forniscono un equilibrio — statistico e non rigoroso —.
 
 ### Modalità pipeline agenti
 
 Una combinazione `pipeline` con almeno due modelli può optare per il routing planner/executor con `config.agenticOrchestration.enabled`. Il primo target possiede la progettazione e le risposte finali; il secondo target emette chiamate allo strumento nativo del client. OmniRoute rileva le continuazioni dei risultati dello strumento dal protocollo di richiesta, chiede al pianificatore se è necessario un altro giro di strumenti e rende dinamicamente l'esecutore o il pianificatore il passaggio finale rivolto al cliente.
+
+`config.agenticOrchestration.contextCompaction` opzionale applica un budget di carico utile separato prima dell'invio di ogni pianificatore o esecutore. Abilitalo esplicitamente:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Si tratta di budget di caratteri JSON serializzati selezionati dall'operatore, non di finestre di contesto dei token o di limiti upstream garantiti. Il modello esatto IDs sovrascrive quello predefinito. Al di sopra della soglia, la compattazione rimuove le definizioni di strumenti identici, ritaglia le prove degli strumenti di grandi dimensioni con un digest e rimuove i vecchi gruppi di cronologia completa verso il rapporto target. Conserva le istruzioni system/developer, l'ultima richiesta dell'utente, l'ultimo round dello strumento incluso calls/results parallelo e l'istruzione di routing principale di Gemini. Le istruzioni di livello superiore e le impostazioni dello strumento vengono conservate. Un indicatore di omissione registra la cronologia rimossa; questo è un taglio deterministico, non un riassunto semantico. Se il contesto bloccato supera ancora il budget, la richiesta restituisce 413 prima di contattare il modello. Con compattazione disabilitata o sotto soglia la richiesta passa invariata.
 
 Nelle continuazioni dei risultati dello strumento, OmniRoute interrompe l'esecuzione anche quando due round completati consecutivi ripetono le stesse chiamate dello strumento con risultati invariati o quando ogni risultato contrassegnato esplicitamente in due round consecutivi non è riuscito. I risultati modificati consentono chiamate ripetute (ad esempio sondaggi). La guardia si reimposta su una nuova richiesta dell'utente, raggruppa le chiamate parallele in un unico round e supporta Anthropic, completamenti chat, risposte e cronologie Gemini. Il pianificatore riceve il motivo e possiede la risposta finale anche se richiede un altro giro di strumento.
 

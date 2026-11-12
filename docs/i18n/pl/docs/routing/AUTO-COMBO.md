@@ -349,6 +349,20 @@ Aby uzyskać ścisłą rotację, użyj `round-robin`; równe wagi na `weighted` 
 
 Kombinacja `pipeline` z co najmniej dwoma modelami może zdecydować się na routing planner/executor za pomocą `config.agenticOrchestration.enabled`. Pierwszy cel jest właścicielem planowania i ostatecznych odpowiedzi; drugi cel emituje wywołania narzędzi natywnych dla klienta. OmniRoute wykrywa kontynuacje wyników narzędzia z protokołu żądania, pyta planistę, czy potrzebna jest kolejna runda narzędzia i dynamicznie sprawia, że wykonawca lub planista staje się ostatnim krokiem skierowanym do klienta.
 
+Opcjonalnie `config.agenticOrchestration.contextCompaction` stosuje oddzielny budżet ładunku przed wysłaniem każdego planisty lub wykonawcy. Włącz to jawnie:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Są to serializowane budżety znaków JSON wybrane przez operatora, a nie okna kontekstowe tokenów lub gwarantowane limity nadrzędne. Dokładny model IDs zastępuje wartość domyślną. Powyżej progu zagęszczanie usuwa identyczne definicje narzędzi, przycina ponadwymiarowe dowody narzędzi za pomocą podsumowania i usuwa stare kompletne grupy historii w kierunku docelowego współczynnika. Zachowuje instrukcje system/developer, najnowsze żądanie użytkownika, ostatnią rundę narzędzia, w tym równoległe calls/results i wiodącą instrukcję routingu Gemini. Instrukcje najwyższego poziomu i ustawienia narzędzi zostają zachowane. Znacznik pominięcia rejestruje usuniętą historię; jest to przycinanie deterministyczne, a nie podsumowanie semantyczne. Jeśli przypięty kontekst nadal przekracza budżet, żądanie zwróci 413 przed skontaktowaniem się z modelem. Przy wyłączonym zagęszczaniu lub poniżej progu żądanie przechodzi bez zmian.
+
 W przypadku kontynuacji wyników narzędzia, OmniRoute zatrzymuje również wykonywanie, gdy dwie kolejne ukończone rundy powtarzają to samo wywołanie narzędzia z niezmienionymi wynikami lub gdy każdy wyraźnie zaznaczony wynik w dwóch kolejnych rundach zakończył się niepowodzeniem. Zmienione wyniki umożliwiają powtarzanie połączeń (na przykład odpytywanie). Strażnik resetuje się na nowe żądanie użytkownika, grupuje połączenia równoległe w jedną rundę i obsługuje Anthropic, zakończenia czatu, odpowiedzi i historie Gemini. Planista otrzymuje powód i jest właścicielem ostatecznej odpowiedzi, nawet jeśli poprosi o kolejną rundę narzędzi.
 
 Dodatkowe modele po drugim celu są zamawiane jako kopie zapasowe wykonawców. Nieudana odpowiedź HTTP lub wyjątek transportu przechodzi do następnego modułu wykonującego, niosąc tę samą decyzję planisty i natywne narzędzia, ale własny krok tego modułu wykonującego wyświetla monit i rozwiązuje połączenie. Pierwsza pomyślna odpowiedź jest zwracana bez zmian, łącznie z przesyłaniem strumieniowym SSE ; W tym miejscu nie można ponowić próby niepowodzenia po pomyślnym rozpoczęciu transmisji. Jeśli wszystkie moduły wykonujące zawiodą, zwracany jest ostatni błąd. Klient przerywa, zatrzymuje wysyłkę.

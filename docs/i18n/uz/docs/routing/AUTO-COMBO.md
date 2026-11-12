@@ -317,7 +317,7 @@ OmniRoute ning kombinatsiyalangan dvigatelini qo'llab-quvvatlaydi** 20 marshrutl
 | `context-relay`     | Kontekstni maqsadlar bo'yicha taqsimlang (uzoq suhbatlar)                                                                                                                                                                    |
 | `fill-first`        | Keyingisiga o'tishdan oldin har bir maqsad uchun kvotani to'ldiring                                                                                                                                                          |
 | `p2c`               | Power-of-2-choices tasodifiy yuk balansi                                                                                                                                                                                     |
-| `random`            | Yagona tasodifiy tanlash                                                                                                                                                                                                     |
+| `random`            | Yagona tasodifiy tanlov                                                                                                                                                                                                      |
 | `least-used`        | Eng past oqim yukiga ega maqsadni tanlang                                                                                                                                                                                    |
 | `cost-optimized`    | Katalog narxini hisobga olgan holda har bir so'rov uchun $ ni minimallashtiring                                                                                                                                              |
 | `reset-aware` ⭐    | Kvotani qayta o'rnatish vaqti bo'yicha birinchi o'ringa qo'ying — qisqa tiklash oynalari yuqori o'ringa ega                                                                                                                  |
@@ -349,6 +349,20 @@ Qattiq aylanish uchun `round-robin` foydalaning; `weighted` bo'yicha teng og'irl
 
 Kamida ikkita modelga ega `pipeline` kombinatsiyasi `config.agenticOrchestration.enabled` bilan planner/executor marshrutlashni tanlashi mumkin. Birinchi maqsad rejalashtirish va yakuniy javoblarga ega; ikkinchi maqsad mijozga tegishli vosita qo'ng'iroqlarini chiqaradi. OmniRoute so'rov protokolidan asbob-natija davomini aniqlaydi, rejalashtiruvchidan boshqa vosita bosqichi kerakmi yoki yo'qligini so'raydi va dinamik ravishda ijrochi yoki rejalashtiruvchini mijoz oldida turgan yakuniy bosqichga aylantiradi.
 
+Ixtiyoriy `config.agenticOrchestration.contextCompaction` har bir rejalashtiruvchi yoki ijrochi jo‘natmasidan oldin alohida foydali yuk byudjetini qo‘llaydi. Uni aniq yoqing:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Bu token kontekst oynalari yoki kafolatlangan yuqori oqim chegaralari emas, balki operator tomonidan tanlangan seriyali JSON belgilar byudjetlari. Aniq model IDs standartni bekor qiladi. Eshik chegarasidan yuqori bo'lsa, siqish bir xil asbob ta'riflarini olib tashlaydi, katta o'lchamdagi asboblar dalillarini dayjest bilan qisqartiradi va maqsadli nisbatga nisbatan eski to'liq tarix guruhlarini olib tashlaydi. system/developer ko'rsatmalarini, foydalanuvchining so'nggi so'rovini, parallel calls/results va Gemini ning etakchi marshrutlash yo'riqnomasini o'z ichiga olgan so'nggi vosita raundini saqlaydi. Yuqori darajadagi ko'rsatmalar va asbob sozlamalari saqlanib qolgan. Tushunmaslik belgisi olib tashlangan tarixni qayd qiladi; Bu semantik xulosa emas, balki deterministik kesishdir. Agar mahkamlangan kontekst hali ham byudjetdan oshsa, so'rov modelga murojaat qilishdan oldin 413 ni qaytaradi. Siqish o'chirilgan yoki chegaradan past bo'lsa, so'rov o'zgarishsiz o'tadi.
+
 Asbob-natijani davom ettirishda, ketma-ket bajarilgan ikkita raund bir xil asbob qo'ng'iroqlarini o'zgarmagan natijalar bilan takrorlaganda yoki ketma-ket ikkita turda har bir aniq belgilangan natija muvaffaqiyatsizlikka uchraganda, OmniRoute ham bajarishni to'xtatadi. O'zgartirilgan natijalar takroriy qo'ng'iroqlarga ruxsat beradi (masalan, so'rov). Qo'riqchi yangi foydalanuvchi so'roviga ko'ra qayta tiklanadi, parallel qo'ng'iroqlarni bir turga guruhlaydi va Anthropic, Chat yakunlari, javoblar va Gemini tarixini qo'llab-quvvatlaydi. Rejalashtiruvchi sababni oladi va boshqa vosita turini talab qilsa ham yakuniy javobga ega bo'ladi.
 
 Ikkinchi nishondan keyin qo'shimcha modellar buyurtma qilingan ijrochi zahiralari. Muvaffaqiyatsiz HTTP javobi yoki transportdan istisno keyingi ijrochiga o'tadi, u bir xil rejalashtiruvchi qarori va mahalliy vositalarni, lekin o'sha ijrochining o'z qadami tez va hal qilingan ulanishni olib yuradi. Birinchi muvaffaqiyatli javob o'zgarishsiz qaytariladi, shu jumladan SSE oqimi; Muvaffaqiyatli oqim boshlanganidan keyin yuzaga kelgan nosozliklarni bu yerda qayta urinib bo‘lmaydi. Agar barcha ijrochilar muvaffaqiyatsiz bo'lsa, oxirgi muvaffaqiyatsizlik qaytariladi. Mijoz jo'natishni to'xtatadi.
@@ -369,9 +383,9 @@ Ijrochi bir javobda bir nechta mustaqil qo'ng'iroqlarni chiqarishi mumkin. Bog'l
 
 Har bir bosqichda bitta so‘rov emas, davra-robin to‘plangan:
 
-- `stickyRoundRobinLimit` (kombo konfiguratsiya, keyin `comboStickyRoundRobinLimit`, keyin `settings.stickyRoundRobinLimit`, standart** 3** ) aylanishdan oldin ko'plab ketma-ket muvaffaqiyatlar uchun bir xil maqsadni saqlab qoladi. Bir so'rovni aylantirish uchun kombinatsiyani bekor qilishni `1` ga o'rnating. Kombo muharriri samarali qiymatni va qaysi qatlamdan kelganligini ko'rsatadi.
+- `stickyRoundRobinLimit` (kombo konfiguratsiya, keyin `comboStickyRoundRobinLimit`, keyin `settings.stickyRoundRobinLimit`, standart** 3** ) aylanishdan oldin ko'plab ketma-ket muvaffaqiyatlar uchun bir xil maqsadni saqlaydi. Bir so'rovni aylantirish uchun kombinatsiyani bekor qilishni `1` ga o'rnating. Kombo muharriri samarali qiymatni va qaysi qatlamdan kelganligini ko'rsatadi.
 - `connectionAwareExpansion` (kombo konfiguratsiya, keyin sozlamalar, standart** yolg'on** ) aylanishdan oldin provayder darajasidagi har bir qadamni har bir hisob maqsadlariga kengaytiradi. B guruhi strategiyalari (ustuvorlik, vaznli, davra-robin, tasodifiy, p2c, eng kam foydalanilgan, xarajat optimallashtirilgan, lkgp, birinchi to‘ldirish, qat’iy tasodifiy, kontekst optimallashtirilgan, kesh-optimallashtirilgan, kontekst-rele, termoyadroviy, quvur liniyasi) bu yoqilgunga qadar provayder darajasidagi ko‘rinishni saqlab turadi. Kombo muharriri meros / yoqish / o'chirishni ko'rsatadi; inherit global standartdan foydalanadi (o'chirilgan).
-- Tezkor-kesh joylashuvi marshrutlash (`promptCacheAffinityEnabled`, standart** rost** ) biriktirilgan ulanishlarni qayta tartiblaydi, shuning uchun mos kesh kalitlari bitta hisobda qoladi. U har bir hisob uchun belgilangan bosqichlar bo'ylab aylanma va vaznli aylanishdan ustun turadi. Agar sizga qat'iy aylantirish kerak bo'lsa, uni Sozlamalar → Combo defaults ostida o'chiring. Har bir kombinatsiyani bekor qilish yo'q.
+- Tezkor-kesh joylashuvi marshrutlash (`promptCacheAffinityEnabled`, standart** rost** ) biriktirilgan ulanishlarni qayta tartiblaydi, shuning uchun mos kesh kalitlari bitta hisobda qoladi. U har bir hisob uchun belgilangan qadamlar bo'ylab aylanma va vaznli aylanishdan ustun turadi. Agar sizga qat'iy aylantirish kerak bo'lsa, uni Sozlamalar → Combo sukut bo'yicha o'chirib qo'ying. Har bir kombinatsiyani bekor qilish yo'q.
 
 Bitta modelda ko'p hisobni aylantirish uchun afzal qiling** bitta dinamik hisob qadami** (bo'sh `connectionId`, butun hovuz) yopishqoq chegarasi bilan `1`, uchta pinned `connectionId` s emas. Qadamlar va yaqinlik RR hisoblagichi oldinga siljishida ham bir xil hisobga tushadi.
 

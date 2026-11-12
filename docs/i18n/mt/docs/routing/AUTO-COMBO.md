@@ -337,6 +337,20 @@ Għal rotazzjoni stretta uża `round-robin`; piżijiet ugwali fuq `weighted` jag
 
 A `pipeline` combo b'mill-inqas żewġ mudelli jistgħu jagħżlu planner/executor routing ma `config.agenticOrchestration.enabled`. L-ewwel mira għandha l-ippjanar u t-tweġibiet finali; it-tieni mira temetti sejħiet għodda indiġeni tal-klijent. OmniRoute jiskopri l-kontinwazzjonijiet tar-riżultat tal-għodda mill-protokoll tat-talba, jistaqsi lill-pjanifikatur jekk hemmx bżonn ta 'rawnd ta' għodda oħra, u dinamikament jagħmel jew lill-eżekutur jew lill-pjanifikatur il-pass finali li jiffaċċja l-klijent.
 
+`config.agenticOrchestration.contextCompaction` mhux obbligatorja tapplika baġit ta' payload separat qabel kull dispaċċ ta' pjanifikatur jew eżekutur. Ippermettiha b'mod espliċitu:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Dawn huma baġits ta 'karattri JSON serialized magħżula mill-operatur, mhux twieqi ta' kuntest token jew limiti upstream garantiti. Il-mudell eżatt IDs jegħleb il-default. Fuq il-limitu, il-kompattazzjoni tneħħi definizzjonijiet identiċi tal-għodda, ittrimmja l-evidenza tal-għodda ta 'daqs eċċessiv b'diġest, u tneħħi gruppi qodma tal-istorja kompluta lejn il-proporzjon fil-mira. Hija żżomm l-istruzzjonijiet system/developer, l-aħħar talba tal-utent, l-aħħar rawnd tal-għodda inkluż calls/results parallel , u l-istruzzjoni ewlenija tar-rotot ta' Gemini. L-istruzzjonijiet tal-ogħla livell u s-settings tal-għodda huma ppreservati. Marker ta' ommissjoni jirreġistra l-istorja mneħħija; dan huwa tirqim deterministiku, mhux sommarju semantiku. Jekk il-kuntest ippinjat xorta jaqbeż il-baġit, it-talba tagħti lura 413 qabel ma tikkuntattja lill-mudell. Bil-kompattazzjoni diżattivata jew taħt il-limitu, it-talba tgħaddi mingħajr tibdil.
+
 Fuq il-kontinwazzjonijiet tar-riżultat tal-għodda, OmniRoute twaqqaf ukoll l-eżekuzzjoni meta żewġ rawnds konsekuttivi kompluti jirrepetu l-istess sejħiet tal-għodda b'riżultati mhux mibdula, jew meta kull riżultat immarkat b'mod espliċitu f'żewġ rawnds konsekuttivi fallew. Ir-riżultati mibdula jippermettu sejħiet ripetuti (per eżempju, polling). Il-gwardja reset fuq talba ġdida ta' utent, tiġbor sejħiet paralleli f'rawnd wieħed, u tappoġġja Anthropic, Tlestija ta' Chat, Risposti u storja Gemini. Il-pjanifikatur jirċievi r-raġuni u jippossjedi t-tweġiba finali anki jekk jitlob rawnd ta 'għodda oħra.
 
 Mudelli addizzjonali wara t-tieni mira huma ordnati backups eżekutur. Rispons HTTP fallut jew eċċezzjoni tat-trasport tavvanza lill-eżekutur li jmiss, li jġorr l-istess deċiżjoni tal-pjanifikatur u għodod indiġeni iżda l-pass ta 'dak l-eżekutur stess konnessjoni fil-pront u riżolta. L-ewwel tweġiba b'suċċess hija rritornata mhux mibdula, inkluż SSE streaming; fallimenti wara li jibda fluss b'suċċess ma jistgħux jerġgħu jiġu ppruvati hawn. Jekk l-eżekuturi kollha jfallu, l-aħħar falliment jiġi rritornat. Klijent abort stop dispatch.
@@ -358,7 +372,7 @@ L-eżekutur jista' jarmi sejħiet indipendenti multipli f'rispons wieħed. Is-se
 Round-robin huwa lott, mhux talba waħda għal kull pass:
 
 - `stickyRoundRobinLimit` (konfigurazzjoni kombinata, imbagħad `comboStickyRoundRobinLimit`, imbagħad `settings.stickyRoundRobinLimit`, default** 3** ) iżomm l-istess mira għal dak ħafna suċċessi konsekuttivi qabel ma jdur. Issettja l-combo override għal `1` għal rotazzjoni ta 'talba waħda. L-editur combo juri l-valur effettiv u minn liema saff ġie.
-- `connectionAwareExpansion` (konfigurazzjoni kombo, imbagħad settings, default** falza** ) tespandi kull pass fil-livell tal-fornitur f'miri għal kull kont qabel ir-rotazzjoni. L-istrateġiji tal-Grupp B (prijoritarji, peżati, round-robin, każwali, p2c, l-inqas użati, kost-ottimizzati, lkgp, fill-first, strict-random, context-optimized, cache-optimized, context-relay, fużjoni, pipeline) iżommu viżjoni fil-livell tal-fornitur sakemm din tkun mixgħula. L-editur combo jesponi wiret / mixgħul / mitfi; wiret juża l-inadempjenza globali (off).
+- `connectionAwareExpansion` (konfigurazzjoni kombo, imbagħad settings, default** falza** ) jespandi kull pass fil-livell tal-fornitur f'miri għal kull kont qabel ir-rotazzjoni. L-istrateġiji tal-Grupp B (prijorità, peżati, round-robin, każwali, p2c, l-inqas użati, ottimizzati skont l-ispejjeż, lkgp, jimlew l-ewwel, stretti bl-addoċċ, ottimizzati skont il-kuntest, ottimizzati bil-cache, kuntest-relay, fużjoni, pipeline) iżommu veduta fil-livell tal-fornitur sakemm din tkun mixgħula. L-editur combo jesponi wiret / mixgħul / mitfi; wiret juża l-inadempjenza globali (off).
 - Rotot tal-lokalità fil-pront-cache (`promptCacheAffinityEnabled`, default** veru** ) jordna mill-ġdid konnessjonijiet ippinjati sabiex iċ-ċwievet tal-cache li jaqblu jibqgħu fuq kont wieħed. Tieħu preċedenza fuq ir-round-robin u r-rotazzjoni peżata fuq passi ippinjati għal kull kont. Itfih taħt Settings → Combo defaults jekk għandek bżonn rotazzjoni stretta. M'hemm l-ebda override per-combo.
 
 Għal rotazzjoni b'ħafna kontijiet fuq mudell wieħed, ippreferi** pass wieħed ta' kont dinamiku** ( `connectionId` vojta , pool kollu) b limitu li jwaħħal `1`, mhux tliet pinned `connectionId` s. Passi ippinjat flimkien ma' affinità kollass fuq l-istess kont anke waqt li l-counter RR javvanza.

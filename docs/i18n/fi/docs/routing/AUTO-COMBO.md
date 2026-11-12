@@ -326,7 +326,7 @@ OmniRoute yhdistelmämoottori tukee** 20 reititysstrategiaa** (ilmoitettu muodos
 | `context-optimized` | Valitse kohde, joka sopii parhaiten nykyiseen kontekstin kokoon                                                                                                                                                               |
 | `cache-optimized`   | Järjestä kohteet uudelleen kehotteen välimuistin affiniteetilla — yritetään ensin yhteyttä, jossa todennäköisimmin jo on tämän pyynnön välimuistissa oleva etuliite (`open-sse/services/combo/promptCacheAffinity.ts`, #8008) |
 | `fusion` 🧬         | Selaa mallien paneeliin rinnakkain ja syntetisoi sitten yksi vastaus tuomarin kautta (katso alla)                                                                                                                             |
-| `pipeline`          | Suorita kohteita peräkkäin ja lanka kunkin vaiheen tulos seuraavan vaiheen syötteeseen; vain lopullinen vastaus palautetaan (#6396)                                                                                           |
+| `pipeline`          | Suorita kohteet peräkkäin, ketjuttamalla kunkin vaiheen tulos seuraavan vaiheen syötteeseen; vain lopullinen vastaus palautetaan (#6396)                                                                                      |
 
 ⭐ = Uutta v3.8.0:ssa · 🧬 = Uutta v3.8.36:ssa
 
@@ -345,6 +345,20 @@ Käytä tiukkaa pyöritystä varten `round-robin`; `weighted` :n samat painot an
 
 `pipeline` yhdistelmä, jossa on vähintään kaksi mallia, voi valita planner/executor reitityksen `config.agenticOrchestration.enabled` kanssa. Ensimmäinen kohde omistaa suunnittelun ja lopulliset vastaukset; toinen kohde lähettää asiakaskohtaisia työkalukutsuja. OmniRoute havaitsee työkalun tuloksen jatkumiset pyyntöprotokollasta, kysyy suunnittelijalta, tarvitaanko uusi työkalukierros, ja tekee dynaamisesti joko toteuttajan tai suunnittelijan asiakkaan puoleisen viimeisen vaiheen.
 
+Valinnainen `config.agenticOrchestration.contextCompaction` käyttää erillistä hyötykuormabudjettia ennen jokaista suunnittelijan tai toteuttajan lähettämistä. Ota se käyttöön erikseen:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Nämä ovat operaattorin valitsemia sarjoitettuja JSON merkkibudjetteja, eivät merkkikontekstiikkunoita tai taattuja ylävirran rajoja. Tarkka malli IDs ohittaa oletusasetuksen. Kynnyksen ylittävä tiivistys poistaa identtiset työkalumäärittelyt, leikkaa liian suuret työkalun todisteet tiivisteellä ja poistaa vanhat täydelliset historiaryhmät kohti tavoitesuhdetta. Se säilyttää system/developer -ohjeet, viimeisimmän käyttäjäpyynnön, viimeisen työkalukierroksen, mukaan lukien rinnakkaiskäskyt calls/results, ja Gemini:n johtavan reitityskäskyn. Huipputason ohjeet ja työkaluasetukset säilyvät. Poistomerkki tallentaa poistetun historian; tämä on deterministinen trimmaus, ei semanttinen yhteenveto. Jos kiinnitetty konteksti ylittää edelleen budjetin, pyyntö palauttaa numeron 413 ennen yhteydenottoa malliin. Kun tiivistys on poistettu käytöstä tai kynnyksen alapuolella, pyyntö kulkee ennallaan.
+
 Työkalun tuloksen jatkuessa OmniRoute lopettaa suorituksen myös, kun kaksi peräkkäistä suoritettua kierrosta toistavat saman työkalukutsun muuttumattomin tuloksin tai kun jokainen erikseen merkitty tulos kahdella peräkkäisellä kierroksella epäonnistui. Muuttuneet tulokset sallivat toistuvat puhelut (esimerkiksi kyselyn). Vartija nollautuu uudesta käyttäjän pyynnöstä, ryhmittelee rinnakkaiset puhelut yhdeksi kierrokseksi ja tukee Anthropic, keskustelun loppuun saattamista, vastauksia ja Gemini historiaa. Suunnittelija saa syyn ja omistaa lopullisen vastauksen, vaikka se pyytäisi uutta työkalukierrosta.
 
 Lisämalleissa toisen kohteen jälkeen tilataan executor-varmuuskopiot. Epäonnistunut HTTP vastaus tai siirtopoikkeus etenee seuraavalle toteuttajalle, joka kuljettaa saman suunnittelijan päätöksen ja alkuperäiset työkalut, mutta toteuttajan oman askelkehotteen ja ratkaistun yhteyden. Ensimmäinen onnistunut vastaus palautetaan muuttumattomana, mukaan lukien SSE -suoratoisto; onnistuneen streamin alkamisen jälkeisiä epäonnistumisia ei voi yrittää uudelleen täällä. Jos kaikki toteuttajat epäonnistuvat, palautetaan viimeinen epäonnistuminen. Asiakas keskeyttää lähetyksen.
@@ -359,7 +373,7 @@ Lisämalleissa toisen kohteen jälkeen tilataan executor-varmuuskopiot. Epäonni
 }
 ```
 
-Toteuttaja voi lähettää useita itsenäisiä kutsuja yhdessä vastauksessa. Riippuvaiset kutsut käsitellään myöhemmissä asiakastyökalun tuloskierroksissa, jolloin suunnittelija tarkistaa jokaisen tuloksen. `maxToolRounds` oletuksena on `8` ja hyväksyy `1`–`32`; Kun se on saavutettu, suunnittelijan tulee tuottaa paras saatavilla oleva lopullinen vastaus. Sisäiset suunnittelijan päätökset puskuroidaan, kun taas valittu asiakaskohtainen vastaus säilyttää alkuperäisen suoratoistoasetuksen.
+Toimeenpanija voi lähettää useita itsenäisiä kutsuja yhdessä vastauksessa. Riippuvaiset kutsut käsitellään myöhemmissä asiakastyökalun tulosvuoroissa, jolloin suunnittelija tarkistaa jokaisen tuloksen. `maxToolRounds` oletuksena on `8` ja hyväksyy `1`–`32`; Kun se on saavutettu, suunnittelijan on tuotettava paras saatavilla oleva lopullinen vastaus. Sisäiset suunnittelijan päätökset puskuroidaan, kun taas valittu asiakaskohtainen vastaus säilyttää alkuperäisen suoratoistoasetuksen.
 
 ### `round-robin` tahmea erä ja tilin laajentaminen
 
@@ -367,7 +381,7 @@ Round-robin on jaettu, ei yksi pyyntö per vaihe:
 
 - `stickyRoundRobinLimit` (combo config, sitten `comboStickyRoundRobinLimit`, sitten `settings.stickyRoundRobinLimit`, oletus** 3** ) säilyttää saman tavoitteen useille peräkkäisille onnistumisille ennen kiertoa. Aseta yhdistelmäohitus arvoon `1` yhden pyynnön kiertoa varten. Yhdistelmäeditori näyttää tehollisen arvon ja mistä tasosta se tuli.
 - `connectionAwareExpansion` (yhdistelmäkokoonpano, sitten asetukset, oletus** väärä** ) laajentaa jokaisen tarjoajatason vaiheen tilikohtaisiksi tavoitteiksi ennen vuorottelua. Ryhmän B strategiat (prioriteetti, painotettu, round-robin, satunnainen, p2c, vähiten käytetty, kustannusoptimoitu, lkgp, täytä ensin, tiukka satunnainen, kontekstioptimoitu, välimuistiin optimoitu, kontekstivälitys, fuusio, liukuhihna) säilyttävät toimittajatason näkymän, kunnes tämä on käytössä. Yhdistelmäeditori paljastaa inherit / on / off; inherit käyttää yleistä oletusarvoa (pois päältä).
-- Välimuistin paikallisreititys (`promptCacheAffinityEnabled`, oletus** totta** ) järjestää kiinnitetyt yhteydet uudelleen, joten vastaavat välimuistiavaimet pysyvät yhdellä tilillä. Se on etusijalla kiertoon ja painotettuun kiertoon nähden kiinnitettyjen tilikohtaisten vaiheiden välillä. Kytke se pois päältä Asetukset → Yhdistelmäoletukset -kohdassa, jos tarvitset tiukkaa kiertoa. Yhdistelmäkohtaista ohitusta ei ole.
+- Välimuistin paikallisreititys (`promptCacheAffinityEnabled`, oletus** totta** ) järjestää kiinnitetyt yhteydet uudelleen, joten vastaavat välimuistiavaimet pysyvät yhdellä tilillä. Se on etusijalla kiertoon ja painotettuun kiertoon nähden kiinnitettyjen tilikohtaisten vaiheiden välillä. Sammuta se kohdasta Asetukset → Combo oletusasetukset, jos tarvitset tiukkaa kiertoa. Yhdistelmäkohtaista ohitusta ei ole.
 
 Valitse mieluummin useamman tilin kierto yhdessä mallissa** yksi dynaamisen tilin vaihe** (tyhjä `connectionId`, koko allas) tarttumisrajalla `1`, ei kolmella kiinnitetyllä `connectionId`:llä. Kiinnitetyt vaiheet ja affiniteetti kutistuvat samalle tilille, vaikka RR -laskuri etenee.
 

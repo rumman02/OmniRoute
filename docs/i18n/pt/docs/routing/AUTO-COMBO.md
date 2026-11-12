@@ -337,8 +337,8 @@ O mecanismo de combinação do OmniRoute suporta** 20 estratégias de encaminham
 `weighted` é um** sorteio aleatório proporcional por pedido** (`open-sse/services/combo/targetSorters.ts` → `selectWeightedTarget`), e não um equalizador:
 
 - Cada solicitação atrai** um** passo com probabilidade `weight / totalWeight`; os restantes passos são ordenados por peso decrescente como a cadeia de fallback para esse pedido.
-- Um passo cujo peso é `0` (ou em falta) é** nunca desenhado** embora qualquer outra etapa tenha um peso > 0 — só pode servir de substituto após a etapa desenhada falhar. Somente quando** tudo** os pesos são 0, a seleção torna-se uniforme.
-- Os passos cujos alvos são indisponíveis — Provider Circuit breaker `OPEN`, Connection Cooldown, Model Lockout — são removidos do sorteio antes de acontecer (`open-sse/services/combo/targetResolution.ts`), pelo que um único passo intacto pode vencer temporariamente todos os pedidos.
+- Um passo cujo peso é `0` (ou em falta) é** nunca desenhado** embora qualquer outra etapa tenha um peso > 0 — só pode servir de substituto após a falha da etapa desenhada. Somente quando** tudo** os pesos são 0, a seleção torna-se uniforme.
+- Etapas cujos alvos são indisponíveis — Provider Circuit breaker `OPEN`, connection cooldown, model lockout — são removidas do sorteio antes que aconteça (`open-sse/services/combo/targetResolution.ts`), portanto, uma única etapa íntegra pode vencer temporariamente todas as solicitações.
 - `stickyWeightedLimit` (configuração de combinação, padrão `1` = desativado) fixa o passo desenhado para tantos sucessos consecutivos antes de redesenhar.
 
 Para rotação estrita utilize `round-robin`; pesos iguais em `weighted` fornecem — estatístico e não equilíbrio estrito —.
@@ -347,9 +347,23 @@ Para rotação estrita utilize `round-robin`; pesos iguais em `weighted` fornece
 
 Um combo `pipeline` com pelo menos dois modelos pode optar pelo encaminhamento planner/executor com `config.agenticOrchestration.enabled`. O primeiro alvo possui planeamento e respostas finais; o segundo alvo emite chamadas de ferramentas nativas do cliente. OmniRoute deteta continuações de resultados de ferramentas do protocolo de pedido, pergunta ao planeador se é necessária outra ronda de ferramentas e torna dinamicamente o executor ou o planeador a etapa final orientada para o cliente.
 
+`config.agenticOrchestration.contextCompaction` opcional aplica um orçamento de carga útil separado antes de cada planeador ou envio de executor. Active-o explicitamente:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Estes são orçamentos de caracteres JSON serializados selecionados pelo operador, e não janelas de contexto de token ou limites de upstream garantidos. O modelo exato IDs substitui o padrão. Acima do limiar, a compressão remove definições de ferramentas idênticas, corta as provas de ferramentas sobredimensionadas com um resumo e remove grupos históricos completos antigos em direção à proporção desejada. Retém as instruções system/developer, o pedido mais recente do utilizador, a última ronda de ferramentas, incluindo calls/results paralelo e as principais instruções de encaminhamento do Gemini. As instruções de nível superior e as definições das ferramentas são preservadas. Um marcador de omissão regista o histórico removido; trata-se de um recorte determinístico, não de um resumo semântico. Se o contexto fixado ainda exceder o orçamento, o pedido retornará 413 antes de contactar o modelo. Com a compressão desativada ou abaixo do limite, o pedido passa inalterado.
+
 Nas continuações dos resultados da ferramenta, OmniRoute também interrompe a execução quando duas rondas consecutivas concluídas repetem as mesmas chamadas de ferramenta com resultados inalterados, ou quando todos os resultados marcados explicitamente em duas rondas consecutivas falham. Os resultados alterados permitem chamadas repetidas (por exemplo, sondagens). O guarda é reposto num novo pedido do utilizador, agrupa as chamadas paralelas numa ronda e suporta Anthropic, conclusões de chat, respostas e históricos Gemini. O planeador recebe o motivo e possui a resposta final, mesmo que solicite outra ronda de ferramentas.
 
-Os modelos adicionais após o segundo destino são backups de executores ordenados. Uma resposta HTTP ou exceção de transporte com falha avança para o próximo executor, transportando a mesma decisão do planeador e ferramentas nativas, mas o passo do próprio executor solicita e resolve a ligação. A primeira resposta bem-sucedida é devolvida inalterada, incluindo o streaming SSE ; falhas após o início de um fluxo bem-sucedido não podem ser aqui repetidas. Se todos os executores falharem, será devolvida a última falha. O cliente cancela o envio interrompido.
+Os modelos adicionais após o segundo destino são backups de executores ordenados. Uma resposta HTTP ou exceção de transporte com falha avança para o próximo executor, transportando a mesma decisão do planeador e ferramentas nativas, mas o prompt de passo do próprio executor e a ligação resolvida. A primeira resposta bem-sucedida é devolvida inalterada, incluindo o streaming SSE ; falhas após o início de um fluxo bem-sucedido não podem ser aqui repetidas. Se todos os executores falharem, será devolvida a última falha. O cliente cancela o envio interrompido.
 
 ```json
 {

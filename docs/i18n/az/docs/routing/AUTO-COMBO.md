@@ -357,9 +357,23 @@ Ciddi fırlanma üçün `round-robin` istifadə edin; `weighted` üzrə bərabə
 
 Ən azı iki modeli olan `pipeline` kombinatı `config.agenticOrchestration.enabled` ilə planner/executor marşrutlaşdırmasına qoşula bilər. Birinci hədəf planlaşdırma və yekun cavablara sahibdir; ikinci hədəf müştəri-doğma alət zənglərini yayır. OmniRoute sorğu protokolundan alət nəticələrinin davamını aşkarlayır, planlaşdırıcıdan başqa bir alət dövrəsinə ehtiyac olub-olmadığını soruşur və dinamik olaraq ya icraçı, ya da planlaşdırıcını müştərinin üzləşdiyi son addım edir.
 
+Könüllü `config.agenticOrchestration.contextCompaction` hər planlaşdırıcı və ya icraçı göndərişindən əvvəl ayrıca faydalı yük büdcəsi tətbiq edir. Bunu açıq şəkildə aktivləşdirin:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Bunlar operator tərəfindən seçilən seriallaşdırılmış JSON simvol büdcələridir, token kontekst pəncərələri və ya zəmanətli yuxarı axın limitləri deyil. Dəqiq model IDs standartı ləğv edir. Həddən yuxarı olan sıxlaşdırma eyni alət təriflərini silir, həzmlə böyük ölçülü alət sübutlarını kəsir və hədəf nisbətinə doğru köhnə tam tarix qruplarını silir. O system/developer təlimatlarını, ən son istifadəçi sorğusunu, paralel calls/results daxil olmaqla sonuncu alət dövrəsini və Gemini-nin aparıcı marşrutlaşdırma təlimatını saxlayır. Ən yüksək səviyyəli təlimatlar və alət parametrləri qorunur. Boşluq işarəsi silinmiş tarixçəni qeyd edir; bu semantik xülasə deyil, deterministik kəsmədir. Sabitlənmiş kontekst hələ də büdcəni aşırsa, modellə əlaqə saxlamazdan əvvəl sorğu 413 qaytarır. Sıxlaşdırma qeyri-aktiv olduqda və ya həddən aşağı olduqda sorğu dəyişməz olaraq keçir.
+
 Alət-nəticə davamlarında, iki ardıcıl tamamlanmış tur eyni alət çağırışlarını dəyişməz nəticələrlə təkrar etdikdə və ya ardıcıl iki raundda hər bir açıq şəkildə qeyd olunan nəticə uğursuz olduqda OmniRoute icranı dayandırır. Dəyişən nəticələr təkrar zənglərə icazə verir (məsələn, sorğu). Mühafizəçi yeni istifadəçi tələbi ilə sıfırlanır, paralel zəngləri bir raundda qruplaşdırır və Anthropic, Söhbət Tamamlamaları, Cavablar və Gemini tarixçələrini dəstəkləyir. Planlaşdırıcı səbəbi alır və başqa bir alət turu tələb etsə belə, yekun cavabın sahibidir.
 
-İkinci hədəfdən sonra əlavə modellərə icraçı ehtiyat nüsxələri sifariş edilir. Uğursuz HTTP cavabı və ya nəqliyyat istisnası eyni planlaşdırıcı qərarını və yerli alətləri daşıyaraq növbəti icraçıya doğru irəliləyir, lakin həmin icraçının öz addımı tez və həll edilmiş əlaqədir. İlk uğurlu cavab SSE axını da daxil olmaqla dəyişməz olaraq qaytarılır; uğurlu yayımdan sonra uğursuzluqlar burada təkrar sınana bilməz. Bütün icraçılar uğursuz olarsa, sonuncu uğursuzluq qaytarılır. Müştəri göndərməni dayandırır.
+İkinci hədəfdən sonra əlavə modellərə icraçı ehtiyat nüsxələri sifariş edilir. Uğursuz HTTP cavabı və ya nəqliyyat istisnası eyni planlaşdırıcı qərarını və yerli alətləri daşıyaraq növbəti icraçıya doğru irəliləyir, lakin həmin icraçının öz addımı tez və həll edilmiş əlaqədir. İlk uğurlu cavab SSE axını da daxil olmaqla dəyişməz olaraq qaytarılır; uğurlu yayımdan sonra uğursuzluqlar burada təkrar sınaqdan keçirilə bilməz. Bütün icraçılar uğursuz olarsa, sonuncu uğursuzluq qaytarılır. Müştəri göndərməni dayandırır.
 
 ```json
 {

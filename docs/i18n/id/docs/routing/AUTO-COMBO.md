@@ -319,7 +319,7 @@ mesin kombo OmniRoute mendukung** 20 strategi perutean** (dideklarasikan dalam `
 | `reset-aware` ⭐    | Prioritaskan berdasarkan waktu reset kuota — short reset windows berperingkat lebih tinggi                                                                                                                        |
 | `reset-window`      | Lebih memilih target yang jendela kuotanya paling cepat direset                                                                                                                                                   |
 | `headroom`          | Pilih target dengan sisa kuota paling banyak                                                                                                                                                                      |
-| `quota-weighted`    | Lewati akun yang sudah habis, lalu pilih di antara akun lainnya sesuai dengan sisa kuota dibagi dengan muatan dalam penerbangan; percakapan yang ada tetap dipasangi pin                                          |
+| `quota-weighted`    | Lewati akun yang habis, lalu pilih di antara sisanya sesuai dengan sisa kuota dibagi dengan muatan dalam penerbangan; percakapan yang ada tetap dipasangi pin                                                     |
 | `strict-random`     | Acak tanpa deduplikasi pengulangan                                                                                                                                                                                |
 | `auto`              | Gunakan penilaian Kombo Otomatis (16 faktor) —** direkomendasikan**                                                                                                                                               |
 | `lkgp`              | Jalur Baik yang Terakhir Diketahui (disematkan ke penyedia terakhir yang berhasil, lalu kembali ke aturan)                                                                                                        |
@@ -337,13 +337,27 @@ mesin kombo OmniRoute mendukung** 20 strategi perutean** (dideklarasikan dalam `
 - Setiap permintaan menarik** satu** langkah dengan probabilitas `weight / totalWeight`; langkah-langkah yang tersisa diurutkan dengan menurunkan bobot sebagai rantai cadangan untuk permintaan tersebut.
 - Sebuah langkah yang bobotnya `0` (atau hilang) adalah** tidak pernah digambar** sementara langkah lainnya memiliki bobot > 0 — langkah tersebut hanya dapat berfungsi sebagai cadangan setelah langkah yang ditarik gagal. Hanya kapan** semua** bobotnya 0 apakah seleksi menjadi seragam.
 - Langkah-langkah yang semua targetnya adalah pemutus sirkuit penyedia — `OPEN`, cooldown koneksi, penguncian model — dihapus dari pengundian sebelum hal itu terjadi (`open-sse/services/combo/targetResolution.ts`), sehingga satu langkah sehat untuk sementara dapat memenangkan setiap permintaan.
-- `stickyWeightedLimit` (konfigurasi kombo, `1` = off default) menyematkan langkah yang ditarik untuk banyak keberhasilan berturut-turut sebelum menggambar ulang.
+- `stickyWeightedLimit` (konfigurasi kombo, default `1` = off) menyematkan langkah yang ditarik untuk banyak keberhasilan berturut-turut sebelum menggambar ulang.
 
 Untuk rotasi yang ketat gunakan `round-robin`; bobot yang sama pada `weighted` memberikan statistik — bukan keseimbangan — yang ketat.
 
 ### Mode saluran agenik
 
 Kombo `pipeline` dengan setidaknya dua model dapat ikut serta dalam perutean planner/executor dengan `config.agenticOrchestration.enabled`. Target pertama memiliki perencanaan dan jawaban akhir; target kedua mengeluarkan panggilan alat asli klien. OmniRoute mendeteksi kelanjutan hasil alat dari protokol permintaan, menanyakan perencana apakah putaran alat lain diperlukan, dan secara dinamis menjadikan pelaksana atau perencana sebagai langkah terakhir yang dihadapi klien.
+
+`config.agenticOrchestration.contextCompaction` opsional menerapkan anggaran muatan terpisah sebelum setiap pengiriman perencana atau pelaksana. Aktifkan secara eksplisit:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Ini adalah anggaran karakter JSON berseri yang dipilih oleh operator, bukan jendela konteks token atau batas upstream yang dijamin. Model persisnya IDs mengesampingkan model default. Di atas ambang batas, pemadatan menghilangkan definisi pahat yang identik, memangkas bukti pahat yang terlalu besar dengan intisari, dan membuang grup riwayat lengkap yang lama menuju rasio target. Ini menyimpan instruksi system/developer, permintaan pengguna terbaru, putaran alat terakhir termasuk calls/results paralel, dan instruksi perutean utama Gemini. Petunjuk tingkat atas dan pengaturan alat dipertahankan. Penanda kelalaian mencatat riwayat yang dihapus; ini adalah pemangkasan deterministik, bukan ringkasan semantik. Jika konteks yang disematkan masih melebihi anggaran, permintaan akan menampilkan 413 sebelum menghubungi model. Dengan pemadatan yang dinonaktifkan atau di bawah ambang batas, permintaan akan lolos tanpa perubahan.
 
 Pada kelanjutan hasil alat, OmniRoute juga menghentikan eksekusi ketika dua putaran selesai berturut-turut mengulangi pemanggilan alat yang sama dengan hasil yang tidak berubah, atau ketika setiap hasil yang ditandai secara eksplisit dalam dua putaran berturut-turut gagal. Hasil yang diubah mengizinkan panggilan berulang (misalnya, polling). Penjaga mengatur ulang berdasarkan permintaan pengguna baru, mengelompokkan panggilan paralel ke dalam satu putaran, dan mendukung Anthropic, Penyelesaian Obrolan, Respons, dan riwayat Gemini. Perencana menerima alasannya dan memiliki jawaban akhir meskipun meminta putaran alat lain.
 

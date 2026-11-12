@@ -311,14 +311,28 @@ OmniRouteのコンボ エンジンがサポート**20 のルーティング戦�
 
 - それぞれのリクエストが描画されます**1つ**確率`weight / totalWeight`のステップ。残りのステップは、そのリクエストのフォールバック チェーンとして重みの降順で並べられます。
 - 重みが`0` (または欠落) であるステップは、**描かれたことがない**他のステップの重みは> 0 —ですが、描画されたステップが失敗した後のフォールバックとしてのみ機能します。ときのみ**全て**重みが 0 の場合、選択は均一になります。
-- ターゲットがすべて使用不可である—プロバイダー サーキット ブレーカー`OPEN`、接続クールダウン、モデル ロックアウト—であるステップは、それが発生する前 (`open-sse/services/combo/targetResolution.ts`) に描画から削除されるため、単一の正常なステップが一時的にすべてのリクエストを獲得できます。
+- ターゲットがすべて使用不可—プロバイダー サーキット ブレーカー`OPEN`、接続クールダウン、モデル ロックアウト—であるステップは、それが発生する前 (`open-sse/services/combo/targetResolution.ts`) に描画から削除されるため、単一の正常なステップが一時的にすべてのリクエストを獲得できます。
 - `stickyWeightedLimit` (コンボ構成、デフォルトでは`1` =オフ) は、再描画する前に、その回数の連続成功に対して描画されたステップを固定します。
 
 厳密なローテーションを行うには、 `round-robin`を使用します。 `weighted`に等しい重みを付けると、厳密な—バランスではなく統計的な—が得られます。
 
 ### エージェントパイプラインモード
 
-少なくとも 2 つのモデルを含む`pipeline`コンボは、 `config.agenticOrchestration.enabled`を使用してplanner/executorルーティングを選択できます。最初のターゲットが計画と最終的な答えを所有します。 2 番目のターゲットは、クライアント ネイティブ ツール呼び出しを発行します。 OmniRoute 、リクエスト プロトコルからツール結果の継続を検出し、プランナーに別のツール ラウンドが必要かどうかを尋ね、実行者またはプランナーのいずれかをクライアント側の最終ステップに動的にします。
+少なくとも 2 つのモデルを含む`pipeline`コンボは、 `config.agenticOrchestration.enabled`を使用してplanner/executorルーティングを選択できます。最初のターゲットが計画と最終的な答えを所有します。 2 番目のターゲットはクライアント ネイティブ ツール呼び出しを発行します。 OmniRoute 、リクエスト プロトコルからツール結果の継続を検出し、プランナーに別のツール ラウンドが必要かどうかを尋ね、実行者またはプランナーのいずれかをクライアント側の最終ステップに動的にします。
+
+オプションの`config.agenticOrchestration.contextCompaction` 、各プランナーまたはエグゼキューターがディスパッチされる前に、個別のペイロード バジェットを適用します。明示的に有効にします。
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+これらは、トークン コンテキスト ウィンドウや保証されたアップストリーム制限ではなく、オペレーターによって選択されたシリアル化されたJSON文字バジェットです。正確なモデルIDsはデフォルトをオーバーライドします。しきい値を超えると、圧縮によって同一のツール定義が削除され、大きすぎるツールの証拠がダイジェストでトリミングされ、古い完全な履歴グループが目標比率に向かって削除されます。 system/developer命令、最新のユーザー要求、並列calls/resultsを含む最後のツール ラウンド、およびGeminiの主要なルーティング命令が保持されます。最上位の命令とツール設定は保持されます。省略マーカーは削除された履歴を記録します。これは決定論的なトリミングであり、意味論的な要約ではありません。固定されたコンテキストが依然としてバジェットを超えている場合、リクエストはモデルに接続する前に 413 を返します。圧縮が無効になっているか、しきい値を下回っている場合、リクエストは変更されずに通過します。
 
 On tool-result continuations, OmniRoute also stops execution when two consecutive completed rounds repeat the same tool calls with unchanged results, or when every explicitly marked result in two consecutive rounds failed. Changed results permit repeated calls (for example, polling). The guard resets on a fresh user request, groups parallel calls into one round, and supports Anthropic, Chat Completions, Responses and Gemini histories. The planner receives the reason and owns the final answer even if it requests another tool round.
 

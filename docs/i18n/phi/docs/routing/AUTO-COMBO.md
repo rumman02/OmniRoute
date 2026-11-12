@@ -335,8 +335,8 @@ Sinusuportahan ng combo engine ng OmniRoute** 20 mga diskarte sa pagruruta** (ip
 `weighted` ay a** proporsyonal na random na draw bawat kahilingan** (`open-sse/services/combo/targetSorters.ts` → `selectWeightedTarget`), hindi isang equalizer:
 
 - Ang bawat kahilingan ay gumuhit** isa** hakbang na may probabilidad `weight / totalWeight`; ang natitirang mga hakbang ay iniutos sa pamamagitan ng pababang timbang bilang fallback chain para sa kahilingang iyon.
-- Ang isang hakbang na ang timbang ay `0` (o nawawala) ay** hindi kailanman iginuhit** habang ang anumang ibang hakbang ay may timbang na > 0 — maaari lamang itong magsilbi bilang isang fallback pagkatapos mabigo ang iginuhit na hakbang. Kapag lang** lahat** ang mga timbang ay 0 nagiging pare-pareho ba ang pagpili.
-- Ang mga hakbang na ang mga target ay lahat ay hindi available — provider circuit breaker `OPEN`, connection cooldown, model lockout — ay inalis mula sa draw bago ito mangyari (`open-sse/services/combo/targetResolution.ts`), kaya isang solong malusog na hakbang ang maaaring pansamantalang mapanalunan ang bawat kahilingan.
+- Ang isang hakbang na ang bigat ay `0` (o nawawala) ay** hindi kailanman iginuhit** habang ang anumang ibang hakbang ay may timbang na > 0 — maaari lamang itong magsilbi bilang isang fallback pagkatapos mabigo ang iginuhit na hakbang. Kapag lang** lahat** ang mga timbang ay 0 nagiging pare-pareho ba ang pagpili.
+- Ang mga hakbang na ang mga target ay lahat ay hindi available — provider circuit breaker `OPEN`, connection cooldown, model lockout — ay inalis sa draw bago ito mangyari (`open-sse/services/combo/targetResolution.ts`), kaya ang isang solong malusog na hakbang ay maaaring pansamantalang mapanalunan ang bawat kahilingan.
 - `stickyWeightedLimit` (combo config, default `1` = off) pin ang iginuhit na hakbang para sa maraming magkakasunod na tagumpay bago muling gumuhit.
 
 Para sa mahigpit na pag-ikot gumamit `round-robin`; pantay na timbang sa `weighted` ay nagbibigay ng istatistikal — hindi mahigpit na balanse —.
@@ -344,6 +344,20 @@ Para sa mahigpit na pag-ikot gumamit `round-robin`; pantay na timbang sa `weight
 ### Mode ng ahente ng pipeline
 
 Ang isang `pipeline` combo na may hindi bababa sa dalawang modelo ay maaaring mag-opt in sa pagruruta planner/executor gamit ang `config.agenticOrchestration.enabled`. Ang unang target ay nagmamay-ari ng pagpaplano at mga huling sagot; ang pangalawang target ay naglalabas ng mga tawag sa tool na native ng kliyente. Nakikita OmniRoute ang mga pagpapatuloy ng resulta ng tool mula sa protocol ng kahilingan, tinatanong ang tagaplano kung kailangan ng isa pang pag-ikot ng tool, at dynamic na ginagawa ang alinman sa tagapagpatupad o tagaplano bilang huling hakbang na nakaharap sa kliyente.
+
+Ang opsyonal `config.agenticOrchestration.contextCompaction` ay naglalapat ng hiwalay na badyet sa payload bago ang bawat pagpapadala ng tagaplano o tagapagpatupad. Paganahin ito nang tahasan:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Ito ay mga serialized JSON character na badyet na pinili ng operator, hindi token context window o mga garantisadong upstream na limitasyon. In-override ng eksaktong modelong IDs ang default. Sa itaas ng threshold, ang compaction ay nag-aalis ng magkaparehong mga kahulugan ng tool, nag-trim ng napakalaking tool na ebidensya gamit ang isang digest, at nag-aalis ng mga lumang kumpletong pangkat ng kasaysayan patungo sa target na ratio. Pinapanatili nito ang mga tagubilin system/developer, ang pinakabagong kahilingan ng user, ang huling round ng tool kasama ang parallel calls/results, at ang nangungunang pagtuturo sa pagruruta Gemini. Ang mga tagubilin sa pinakamataas na antas at mga setting ng tool ay pinapanatili. Ang isang omission marker ay nagtatala ng inalis na kasaysayan; ito ay deterministic trimming, hindi isang semantic summary. Kung lumampas pa rin sa badyet ang naka-pin na konteksto, ibabalik ng kahilingan ang 413 bago makipag-ugnayan sa modelo. Kapag hindi pinagana ang compaction o mas mababa sa threshold ang kahilingan ay dumadaan sa hindi nagbabago.
 
 Sa mga pagpapatuloy ng resulta ng tool, humihinto din OmniRoute sa pagpapatupad kapag ang dalawang magkasunod na nakumpletong round ay inuulit ang parehong mga tool call na may hindi nagbabagong mga resulta, o kapag ang bawat tahasang minarkahan ay nagresulta sa dalawang magkasunod na round na nabigo. Pinahihintulutan ng mga binagong resulta ang mga paulit-ulit na tawag (halimbawa, pagboto). Nagre-reset ang guard sa isang bagong kahilingan ng user, pinapangkat ang magkakatulad na tawag sa isang round, at sinusuportahan ang Anthropic, Mga Pagkumpleto ng Chat, Mga Tugon at Gemini na kasaysayan. Natatanggap ng tagaplano ang dahilan at nagmamay-ari ng huling sagot kahit na humiling ito ng isa pang tool round.
 
@@ -367,7 +381,7 @@ Round-robin ay batched, hindi one-request-per-step:
 
 - `stickyRoundRobinLimit` (combo config, pagkatapos ay `comboStickyRoundRobinLimit`, pagkatapos ay `settings.stickyRoundRobinLimit`, default** 3** ) pinapanatili ang parehong target para sa maraming magkakasunod na tagumpay bago iikot. Itakda ang combo override sa `1` para sa pag-ikot ng isang kahilingan. Ipinapakita ng combo editor ang epektibong halaga at kung saang layer ito nanggaling.
 - `connectionAwareExpansion` (combo config, pagkatapos ay mga setting, default** mali** ) pinapalawak ang bawat hakbang sa antas ng provider sa mga target ng bawat account bago ang pag-ikot. Ang mga diskarte sa Group-B (priority, weighted, round-robin, random, p2c, hindi gaanong ginagamit, cost-optimized, lkgp, fill-first, strict-random, context-optimized, cache-optimized, context-relay, fusion, pipeline) ay nagpapanatili ng view sa antas ng provider hanggang sa ito ay naka-on. Inilalantad ng combo editor ang inherit / on / off; ginagamit ng inherit ang global default (off).
-- Prompt-cache locality routing (`promptCacheAffinityEnabled`, default** totoo** ) ay muling nag-aayos ng mga naka-pin na koneksyon upang ang mga katugmang cache key ay manatili sa isang account. Mas inuuna ito kaysa sa round-robin at may timbang na pag-ikot sa mga naka-pin na hakbang sa bawat account. I-off ito sa ilalim ng Mga Setting → Combo default kung kailangan mo ng mahigpit na pag-ikot. Walang per-combo override.
+- Prompt-cache locality routing (`promptCacheAffinityEnabled`, default** totoo** ) ay muling nag-aayos ng mga naka-pin na koneksyon upang ang mga tugmang cache key ay manatili sa isang account. Mas inuuna ito kaysa sa round-robin at may timbang na pag-ikot sa mga naka-pin na hakbang sa bawat account. I-off ito sa ilalim ng Mga Setting → Combo default kung kailangan mo ng mahigpit na pag-ikot. Walang per-combo override.
 
 Para sa multi-account rotation sa isang modelo, mas gusto** isang dynamic-account na hakbang** (walang laman `connectionId`, buong pool) na may malagkit na limitasyon `1`, hindi tatlong naka-pin `connectionId` s. Ang mga naka-pin na hakbang at affinity ay bumagsak sa parehong account kahit na umuusad ang RR counter.
 

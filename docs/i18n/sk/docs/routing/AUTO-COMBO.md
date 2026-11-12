@@ -315,7 +315,7 @@ OmniRoute's combo engine podporuje** 20 stratégií smerovania** (deklarované v
 | `random`            | Jednotný náhodný výber                                                                                                                                                                                                                     |
 | `least-used`        | Vyberte cieľ s najnižším prúdovým zaťažením                                                                                                                                                                                                |
 | `cost-optimized`    | Minimalizujte $ za požiadavku podľa katalógových cien                                                                                                                                                                                      |
-| `reset-aware` ⭐    | Uprednostnite podľa času resetovania kvóty — krátke resetovacie okná sú umiestnené vyššie                                                                                                                                                  |
+| `reset-aware` ⭐    | Uprednostnite podľa času resetovania kvóty — krátke resetovacie okná sú hodnotené vyššie                                                                                                                                                   |
 | `reset-window`      | Uprednostniť ciele, ktorých okno kvóty sa resetuje čo najskôr                                                                                                                                                                              |
 | `headroom`          | Vyberte cieľ s najväčšou zostávajúcou rezervou kvóty                                                                                                                                                                                       |
 | `quota-weighted`    | Preskočte vyčerpané účty a potom vyberte spomedzi ostatných v pomere k zostávajúcej kvóte vydelenej nákladom počas letu; existujúce konverzácie zostanú pripnuté                                                                           |
@@ -334,7 +334,7 @@ OmniRoute's combo engine podporuje** 20 stratégií smerovania** (deklarované v
 `weighted` je a** proporcionálne náhodné žrebovanie na žiadosť** (`open-sse/services/combo/targetSorters.ts` → `selectWeightedTarget`), nie ekvalizér:
 
 - Každá žiadosť sa žrebuje** jeden** krok s pravdepodobnosťou `weight / totalWeight`; zostávajúce kroky sú zoradené podľa zostupnej váhy ako záložný reťazec pre danú požiadavku.
-- Krok, ktorého hmotnosť je `0` (alebo chýba), je** nikdy nekreslené** zatiaľ čo ktorýkoľvek iný krok má váhu > 0 — môže slúžiť len ako záložný krok, keď nakreslený krok zlyhá. Len keď** všetky** váhy sú 0, výber bude jednotný.
+- Krok, ktorého hmotnosť je `0` (alebo chýba), je** nikdy nekreslené** zatiaľ čo akýkoľvek iný krok má váhu > 0 — môže slúžiť len ako záložný krok, keď nakreslený krok zlyhá. Len keď** všetky** váhy sú 0, výber bude jednotný.
 - Kroky, ktorých ciele sú nedostupné — poskytovateľ obvodu `OPEN`, ochladzovanie pripojenia, blokovanie modelu — sú odstránené zo žrebovania skôr, ako sa tak stane (`open-sse/services/combo/targetResolution.ts`), takže každú požiadavku môže dočasne vyhrať jeden zdravý krok.
 - `stickyWeightedLimit` (kombinovaná konfigurácia, predvolené `1` = vypnuté) pripne nakreslený krok pre toľko po sebe nasledujúcich úspechov pred opätovným vykreslením.
 
@@ -343,6 +343,20 @@ Na presné striedanie použite `round-robin`; rovnaké váhy na `weighted` posky
 ### Agentický režim potrubia
 
 Kombinácia `pipeline` s najmenej dvoma modelmi sa môže rozhodnúť pre smerovanie planner/executor pomocou `config.agenticOrchestration.enabled`. Prvý cieľ vlastní plánovanie a konečné odpovede; druhý cieľ vydáva volania nástroja natívneho klienta. OmniRoute deteguje pokračovanie výsledkov nástroja z protokolu požiadaviek, pýta sa plánovača, či je potrebné ďalšie kolo nástroja, a dynamicky robí z vykonávateľa alebo plánovača posledný krok, ktorý je pred klientom.
+
+Voliteľné `config.agenticOrchestration.contextCompaction` aplikuje samostatný rozpočet užitočného zaťaženia pred každým odoslaním plánovača alebo vykonávateľa. Povoliť explicitne:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Ide o serializované rozpočty znakov JSON vybrané operátorom, nie kontextové okná tokenov alebo garantované upstream limity. Presný model IDs prepíše predvolené nastavenie. Nad prahovou hodnotou zhutnenie odstraňuje identické definície nástrojov, orezáva evidenciu nadmerných nástrojov pomocou súhrnu a odstraňuje staré kompletné skupiny histórie smerom k cieľovému pomeru. Zachováva inštrukcie system/developer, najnovšiu požiadavku používateľa, posledné kolo nástroja vrátane paralelného calls/results a vedúcu smerovaciu inštrukciu Gemini. Zachovajú sa pokyny na najvyššej úrovni a nastavenia nástrojov. Značka vynechania zaznamenáva odstránenú históriu; ide o deterministické orezávanie, nie o sémantické zhrnutie. Ak pripnutý kontext stále prekračuje rozpočet, žiadosť pred kontaktovaním modelu vráti 413. Keď je zhutňovanie vypnuté alebo je pod prahovou hodnotou, požiadavka prechádza nezmenená.
 
 Pri pokračovaní výsledkov nástroja OmniRoute tiež zastaví vykonávanie, keď dve po sebe idúce dokončené kolá opakujú rovnaké volania nástroja s nezmenenými výsledkami, alebo keď zlyhal každý explicitne označený výsledok v dvoch po sebe nasledujúcich kolách. Zmenené výsledky umožňujú opakované volania (napríklad hlasovanie). Strážca sa resetuje na novú požiadavku používateľa, zoskupí paralelné hovory do jedného kola a podporuje históriu Anthropic, dokončenia chatu, odpovedí a Gemini. Plánovač dostane dôvod a vlastní konečnú odpoveď, aj keď požaduje ďalšie kolo nástroja.
 

@@ -316,7 +316,7 @@ OmniRoute's combo-engine ondersteunt** 20 routeringsstrategieën** (aangegeven i
 | `random`            | Uniforme willekeurige selectie                                                                                                                                                                                                                                  |
 | `least-used`        | Kies een doel met de laagste stroombelasting                                                                                                                                                                                                                    |
 | `cost-optimized`    | Minimaliseer $ per aanvraag op basis van catalogusprijzen                                                                                                                                                                                                       |
-| `reset-aware` ⭐    | Prioriteer op basis van de quota-resettijd — korte reset-vensters hoger scoren                                                                                                                                                                                  |
+| `reset-aware` ⭐    | Prioriteit geven op basis van de quota-resettijd — korte reset-vensters hoger scoren                                                                                                                                                                            |
 | `reset-window`      | Geef de voorkeur aan doelen waarvan de quotaperiode het snelst wordt gereset                                                                                                                                                                                    |
 | `headroom`          | Kies het doel met de meeste resterende quotumruimte                                                                                                                                                                                                             |
 | `quota-weighted`    | Sla uitgeputte accounts over en kies vervolgens een van de rest in verhouding tot het overgebleven quotum gedeeld door de lading tijdens de vlucht; bestaande gesprekken blijven vastgezet                                                                      |
@@ -343,7 +343,21 @@ Gebruik voor strikte rotatie `round-robin`; Gelijke gewichten op `weighted` geve
 
 ### Agentische pijplijnmodus
 
-Een `pipeline` combo met ten minste twee modellen kan zich aanmelden voor planner/executor routering met `config.agenticOrchestration.enabled`. Het eerste doelwit is eigenaar van de planning en de eindantwoorden; het tweede doel zendt client-native tooloproepen uit. OmniRoute detecteert voortzettingen van toolresultaten uit het aanvraagprotocol, vraagt de planner of er nog een toolronde nodig is, en maakt op dynamische wijze de uitvoerder of planner de klantgerichte laatste stap.
+Een `pipeline` combo met ten minste twee modellen kan zich aanmelden voor planner/executor routering met `config.agenticOrchestration.enabled`. Het eerste doelwit is eigenaar van de planning en de definitieve antwoorden; het tweede doel zendt client-native tooloproepen uit. OmniRoute detecteert voortzettingen van toolresultaten uit het aanvraagprotocol, vraagt de planner of er nog een toolronde nodig is, en maakt op dynamische wijze de uitvoerder of planner de klantgerichte laatste stap.
+
+Optioneel hanteert `config.agenticOrchestration.contextCompaction` vóór elke planner of uitvoerder een apart payloadbudget. Schakel het expliciet in:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Dit zijn geserialiseerde JSON tekenbudgetten die door de operator zijn geselecteerd, geen token-contextvensters of gegarandeerde upstream-limieten. Exact model IDs overschrijft de standaard. Boven de drempel verwijdert compactie identieke gereedschapsdefinities, trimt overmaats gereedschapsbewijsmateriaal met een overzicht en verwijdert oude complete geschiedenisgroepen richting de doelverhouding. Het behoudt system/developer -instructies, het laatste gebruikersverzoek, de laatste toolronde inclusief parallelle calls/results en de leidende routeringsinstructie van Gemini. Instructies op het hoogste niveau en gereedschapsinstellingen blijven behouden. Een weglatingsmarkering registreert de verwijderde geschiedenis; dit is deterministisch bijsnijden, geen semantische samenvatting. Als de vastgezette context het budget nog steeds overschrijdt, retourneert het verzoek 413 voordat contact wordt opgenomen met het model. Als verdichting is uitgeschakeld of onder de drempel ligt, wordt het verzoek ongewijzigd doorgegeven.
 
 Bij voortzetting van gereedschapsresultaten stopt OmniRoute ook met de uitvoering wanneer twee opeenvolgende voltooide rondes dezelfde tooloproepen herhalen met ongewijzigde resultaten, of wanneer elk expliciet gemarkeerd resultaat in twee opeenvolgende rondes mislukt. Gewijzigde resultaten maken herhaalde oproepen mogelijk (bijvoorbeeld polling). De bewaker wordt gereset bij een nieuw gebruikersverzoek, groepeert parallelle oproepen in één ronde en ondersteunt Anthropic, chatvoltooiingen, reacties en Gemini geschiedenissen. De planner ontvangt de reden en is eigenaar van het uiteindelijke antwoord, ook als hij om een nieuwe gereedschapsronde vraagt.
 

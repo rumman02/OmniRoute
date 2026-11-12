@@ -342,6 +342,20 @@ Pentru rotație strictă utilizați `round-robin`; ponderi egale pe `weighted` d
 
 Un combo `pipeline` cu cel puțin două modele poate opta pentru rutarea planner/executor cu `config.agenticOrchestration.enabled`. Prima țintă deține planificarea și răspunsurile finale; a doua țintă emite apeluri de instrumente native client. OmniRoute detectează continuarea rezultatelor sculei din protocolul de solicitare, întreabă planificatorul dacă este nevoie de o altă rundă de scule și face ca executantul sau planificatorul să fie în mod dinamic pasul final orientat spre client.
 
+Opțional, `config.agenticOrchestration.contextCompaction` aplică un buget de sarcină utilă separat înainte de fiecare expediere a planificatorului sau executorului. Activați-l în mod explicit:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Acestea sunt bugete de caractere JSON serializate selectate de operator, nu ferestre de context simbol sau limite garantate în amonte. Modelul exact IDs înlocuiește valoarea implicită. Deasupra pragului, compactarea elimină definițiile identice ale sculelor, decupează dovezile de scule supradimensionate cu un rezumat și elimină grupurile vechi de istoric complet către raportul țintă. Acesta păstrează instrucțiunile system/developer, cea mai recentă solicitare a utilizatorului, ultima rundă de instrumente, inclusiv calls/results paralel și instrucțiunea de rutare principală a lui Gemini. Instrucțiunile de nivel superior și setările instrumentului sunt păstrate. Un marcator de omisiune înregistrează istoricul eliminat; aceasta este o tăiere deterministă, nu un rezumat semantic. Dacă contextul fixat depășește în continuare bugetul, cererea returnează 413 înainte de a contacta modelul. Cu compactarea dezactivată sau sub prag, cererea trece neschimbată.
+
 În continuarea rezultatelor instrumentului, OmniRoute oprește și execuția atunci când două runde finalizate consecutive repetă aceleași apeluri de instrumente cu rezultate neschimbate sau când fiecare rezultat marcat în mod explicit din două runde consecutive a eșuat. Rezultatele modificate permit apeluri repetate (de exemplu, sondaje). Paza se resetează la o nouă solicitare a utilizatorului, grupează apelurile paralele într-o singură rundă și acceptă Anthropic, Terminări de chat, Răspunsuri și istoricul Gemini. Planificatorul primește motivul și deține răspunsul final chiar dacă solicită o altă rundă de instrumente.
 
 Modelele suplimentare după a doua țintă sunt comandate de copii de siguranță ale executorului. Un răspuns HTTP eșuat sau o excepție de transport înaintează către următorul executant, purtând aceeași decizie a planificatorului și instrumente native, dar propriul pas al executorului prompt și conexiunea rezolvată. Primul răspuns de succes este returnat neschimbat, inclusiv SSE streaming; eșecurile după începerea cu succes a unui flux nu pot fi reîncercate aici. Dacă toți executanții eșuează, ultimul eșec este returnat. Clientul anulează oprirea expedierii.
@@ -363,7 +377,7 @@ Executorul poate emite mai multe apeluri independente într-un singur răspuns. 
 Round-robin este grupat, nu o singură cerere pe pas:
 
 - `stickyRoundRobinLimit` (configurație combo, apoi `comboStickyRoundRobinLimit`, apoi `settings.stickyRoundRobinLimit`, implicit** 3** ) păstrează aceeași țintă pentru atâtea succese consecutive înainte de rotație. Setați suprascrierea combo la `1` pentru rotația cu o singură cerere. Editorul combo arată valoarea efectivă și din ce strat provine.
-- `connectionAwareExpansion` (configurație combinată, apoi setări, implicit** fals** ) extinde fiecare pas la nivel de furnizor în obiective pentru fiecare cont înainte de rotație. Strategiile de grup B (prioritare, ponderate, round-robin, aleatoriu, p2c, cele mai puțin utilizate, optimizate în funcție de cost, lkgp, umplere mai întâi, strict aleatoriu, optimizate în context, optimizate în cache, releu context, fuziune, pipeline) păstrează o vizualizare la nivel de furnizor până când aceasta este activată. Editorul combo expune moștenire / activare / dezactivare; moștenire utilizează valoarea implicită globală (dezactivată).
+- `connectionAwareExpansion` (configurație combinată, apoi setări, implicit** fals** ) extinde fiecare pas la nivel de furnizor în obiective pentru fiecare cont înainte de rotație. Strategiile de grup B (prioritare, ponderate, round-robin, aleatoriu, p2c, cele mai puțin utilizate, optimizate pentru costuri, lkgp, umplere mai întâi, strict aleatoriu, optimizate pentru context, optimizate pentru cache, releu context, fuziune, pipeline) păstrează o vizualizare la nivel de furnizor până când aceasta este activată. Editorul combo expune moștenire / activare / dezactivare; moștenire utilizează valoarea implicită globală (dezactivată).
 - Rutarea localității prompt-cache (`promptCacheAffinityEnabled`, implicit** adevărat** ) reordonează conexiunile fixate, astfel încât cheile cache corespunzătoare rămân într-un singur cont. Are prioritate față de rotația round-robin și ponderată între pași fixați pentru fiecare cont. Dezactivați-l din Setări → Combo implicite dacă aveți nevoie de rotație strictă. Nu există o modificare per combo.
 
 Pentru rotația cu mai multe conturi pe un singur model, preferați** un singur pas de cont dinamic** ( `connectionId` gol, bazin întreg) cu limită lipicioasă `1`, nu trei `connectionId` fixate. Pașii fixați plus afinitatea se prăbușesc în același cont chiar și în timp ce contorul RR avansează.

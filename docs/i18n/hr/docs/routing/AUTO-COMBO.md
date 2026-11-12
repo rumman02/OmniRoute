@@ -338,7 +338,7 @@ OmniRoute kombinirani motor podržava** 20 strategija usmjeravanja** (deklarisan
 
 - Svaki zahtjev izvlači** jedan** korak s vjerojatnošću `weight / totalWeight`; preostali koraci su poredani prema silaznoj težini kao rezervni lanac za taj zahtjev.
 - Korak čija je težina `0` (ili nedostaje) jest** nikada nacrtana** dok bilo koji drugi korak ima težinu > 0 — može poslužiti samo kao rezerva nakon što nacrtani korak ne uspije. Tek kada** sve** ponderi su 0 postaje li odabir ujednačen.
-- Koraci čiji su ciljevi svi nedostupni prekidač — dobavljača `OPEN`, hlađenje veze, zaključavanje modela — uklanjaju se iz izvlačenja prije nego što se to dogodi (`open-sse/services/combo/targetResolution.ts`), tako da jedan zdravi korak može privremeno pobijediti na svakom zahtjevu.
+- Koraci čiji su svi ciljevi nedostupni prekidač — dobavljača `OPEN`, hlađenje veze, zaključavanje modela — uklanjaju se iz izvlačenja prije nego što se to dogodi (`open-sse/services/combo/targetResolution.ts`), tako da jedan zdravi korak može privremeno pobijediti na svakom zahtjevu.
 - `stickyWeightedLimit` (kombinirana konfiguracija, zadana `1` = isključena) pričvršćuje nacrtani korak za toliko uzastopnih uspjeha prije ponovnog crtanja.
 
 Za strogu rotaciju koristite `round-robin`; jednake težine na `weighted` daju statističku — ne strogu — ravnotežu.
@@ -347,9 +347,23 @@ Za strogu rotaciju koristite `round-robin`; jednake težine na `weighted` daju s
 
 Kombinacija `pipeline` s najmanje dva modela može se odlučiti za planner/executor usmjeravanje sa `config.agenticOrchestration.enabled`. Prva meta posjeduje planiranje i konačne odgovore; drugi cilj emitira izvorne klijentske pozive alata. OmniRoute detektira nastavak rezultata alata iz protokola zahtjeva, pita planera je li potrebna još jedna runda alata i dinamički čini ili izvršitelja ili planera posljednjim korakom okrenutim klijentu.
 
+Izborni `config.agenticOrchestration.contextCompaction` primjenjuje zasebni proračun korisnog opterećenja prije svakog slanja planera ili izvršitelja. Omogućite ga eksplicitno:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Ovo su serijalizirani proračuni JSON znakova koje je odabrao operater, a ne kontekstni prozori tokena ili zajamčena uzvodna ograničenja. Točan model IDs nadjačava zadani. Iznad praga, sažimanje uklanja identične definicije alata, skraćuje predimenzionirane dokaze alata sa sažetkom i uklanja stare kompletne grupe povijesti prema ciljanom omjeru. Zadržava system/developer upute, najnoviji korisnički zahtjev, posljednju rundu alata uključujući paralelni calls/results i Gemini vodeće upute za usmjeravanje. Upute najviše razine i postavke alata su sačuvane. Oznaka za izostavljanje bilježi uklonjenu povijest; ovo je determinističko skraćivanje, a ne semantički sažetak. Ako prikvačeni kontekst i dalje premašuje proračun, zahtjev vraća 413 prije kontaktiranja modela. S onemogućenim sažimanjem ili ispod praga, zahtjev prolazi nepromijenjen.
+
 Kod nastavka rezultata alata, OmniRoute također zaustavlja izvršenje kada dvije uzastopne završene runde ponavljaju iste pozive alata s nepromijenjenim rezultatima ili kada svaki eksplicitno označen rezultat u dvije uzastopne runde nije uspio. Promijenjeni rezultati dopuštaju ponavljanje poziva (na primjer, prozivanje). Čuvar se resetira na novi zahtjev korisnika, grupira paralelne pozive u jedan krug i podržava Anthropic, dovršetke razgovora, odgovore i Gemini povijesti. Planer prima razlog i posjeduje konačni odgovor čak i ako zahtijeva još jedan krug alata.
 
-Dodatni modeli nakon drugog cilja su naručene sigurnosne kopije izvršitelja. Neuspjeli HTTP odgovor ili iznimka prijenosa napreduje do sljedećeg izvršitelja, noseći istu odluku planera i izvorne alate, ali taj izvršitelj vlastiti korak koraka i razriješenu vezu. Prvi uspješni odgovor vraća se nepromijenjen, uključujući SSE streaming; kvarovi nakon uspješnog pokretanja toka ne mogu se ponovno pokušati ovdje. Ako svi izvršitelji ne uspiju, vraća se zadnji neuspjeh. Klijent prekida otpremu.
+Dodatni modeli nakon drugog cilja su naručene sigurnosne kopije izvršitelja. Neuspjeli HTTP odgovor ili iznimka prijenosa napreduje do sljedećeg izvršitelja, noseći istu odluku planera i izvorne alate, ali taj izvršitelj vlastiti korak koraka i razriješenu vezu. Prvi uspješni odgovor vraća se nepromijenjen, uključujući SSE streaming; kvarovi nakon uspješnog pokretanja toka ne mogu se ponovno pokušati ovdje. Ako svi izvršitelji ne uspiju, vraća se posljednji neuspjeh. Klijent prekida otpremu.
 
 ```json
 {
@@ -369,7 +383,7 @@ Round-robin je grupiran, a ne jedan zahtjev po koraku:
 
 - `stickyRoundRobinLimit` (kombinirana konfiguracija, zatim `comboStickyRoundRobinLimit`, zatim `settings.stickyRoundRobinLimit`, zadano** 3** ) zadržava istu metu toliko uzastopnih uspjeha prije rotiranja. Postavite nadjačavanje kombinacije na `1` za rotaciju s jednim zahtjevom. Kombinirani uređivač prikazuje efektivnu vrijednost i iz kojeg sloja dolazi.
 - `connectionAwareExpansion` (kombinirana konfiguracija, zatim postavke, zadano** lažno** ) proširuje svaki korak na razini pružatelja u ciljeve po računu prije rotacije. Strategije skupine B (prioritetne, ponderirane, kružne, nasumične, p2c, najmanje korištene, troškovno optimizirane, lkgp, prvo popuni, striktno nasumične, kontekstno optimizirane, predmemorije optimizirane, kontekstno relejne, fusion, cjevovod) zadržavaju prikaz na razini pružatelja dok ovo nije uključeno. Kombo uređivač izlaže nasljeđivanje / uključivanje / isključivanje; nasljeđivanje koristi globalnu zadanu vrijednost (isključeno).
-- Prompt-cache locality routing (`promptCacheAffinityEnabled`, zadano** pravi** ) mijenja redoslijed prikvačenih veza tako da odgovarajući ključevi predmemorije ostaju na jednom računu. Ima prednost pred kružnom i ponderiranom rotacijom preko prikvačenih koraka po računu. Isključite ga pod zadanim postavkama → Combo ako vam je potrebna stroga rotacija. Ne postoji nadjačavanje po kombinacijama.
+- Prompt-cache locality routing (`promptCacheAffinityEnabled`, zadano** pravi** ) mijenja redoslijed prikvačenih veza tako da odgovarajući ključevi predmemorije ostaju na jednom računu. Ima prednost nad kružnom i ponderiranom rotacijom preko prikvačenih koraka po računu. Isključite ga pod zadanim postavkama → Combo ako vam je potrebna stroga rotacija. Ne postoji nadjačavanje po kombinacijama.
 
 Za rotaciju više računa na jednom modelu, radije** jedan korak dinamičkog računa** (prazan `connectionId`, cijeli bazen) s ljepljivim ograničenjem `1`, a ne tri prikvačena `connectionId` s. Prikvačeni koraci i afinitet skupljaju se na isti račun čak i dok RR brojač napreduje.
 

@@ -334,7 +334,7 @@ OmniRoute's combo engine na-akwado** 20 ụzọ aghụghọ** (kwuru na `src/sha
 `weighted` bu a** nhata random eserese kwa arịrịọ** (`open-sse/services/combo/targetSorters.ts` → `selectWeightedTarget`), ọ bụghị ihe nhata:
 
 - Arịrịọ ọ bụla na-adọta** otu** nzọụkwụ na puru omume `weight / totalWeight`; A na-enye iwu usoro ndị fọdụrụ site n'ịgbadata ibu dị ka agbụ azụ azụ maka arịrịọ ahụ.
-- Nzọụkwụ nke ibu ya bụ `0` (ma ọ bụ efu) bụ** mgbe e sere** ebe nzọụkwụ ọ bụla ọzọ nwere arọ > 0 — ọ nwere ike na-eje ozi dị ka ọdịda mgbe nzọụkwụ a dọtara daa. Naanị mgbe** niile** arọ bụ 0 ka nhọrọ na-aghọ otu.
+- Nzọụkwụ nke ibu ya bụ `0` (ma ọ bụ efu) bụ** mgbe e sere** ebe nzọụkwụ ọ bụla ọzọ nwere oke > 0 — ọ nwere ike bụrụ naanị ọdịda mgbe nzọụkwụ a dọtara ada ada. Naanị mgbe** niile** arọ bụ 0 ka nhọrọ na-aghọ otu.
 - A na-ewepụ nzọụkwụ ndị ebumnuche ha niile adịghịzi — na-eweta sekit breaker `OPEN`, njikọ cooldown, model lockout — na-ewepụ na eserese tupu ya emee (`open-sse/services/combo/targetResolution.ts`), ya mere otu nzọụkwụ ahụike nwere ike imeri arịrịọ ọ bụla nwa oge.
 - `stickyWeightedLimit` (nhazi combo, ndabara `1` = gbanyụọ) na-atụnye nzọụkwụ adọtara maka ọtụtụ ihe ịga nke ọma n'usoro tupu ịdegharịa.
 
@@ -342,11 +342,25 @@ Maka ntụgharị siri ike jiri `round-robin`; nha nha nha na `weighted` na-enye
 
 ### Ụdị pipeline
 
-Ngwakọta `pipeline` nwere opekata mpe ụdị abụọ nwere ike ịbanye na planner/executor iji `config.agenticOrchestration.enabled` banye. Ebumnuche nke mbụ nwere atụmatụ na azịza ikpeazụ; ebumnobi nke abụọ na-ebute oku ngwa ngwa nke ndị ahịa. OmniRoute na-achọpụta na-aga n'ihu na nsonaazụ ngwa site na usoro arịrịọ ahụ, jụọ onye nhazi ma ọ dị mkpa okirikiri ngwaọrụ ọzọ, ma na-eme ka onye ọrụ ma ọ bụ onye na-eme atụmatụ bụrụ onye ahịa na-eche nzọụkwụ ikpeazụ ihu.
+Ngwakọta `pipeline` nwere opekata mpe ụdị abụọ nwere ike ịbanye na planner/executor routing na `config.agenticOrchestration.enabled`. Ebumnuche nke mbụ nwere atụmatụ na azịza ikpeazụ; ebumnobi nke abụọ na-ebute oku ngwa ngwa nke ndị ahịa. OmniRoute na-achọpụta na-aga n'ihu na nsonaazụ ngwa site na usoro arịrịọ ahụ, jụọ onye nhazi ma ọ dị mkpa okirikiri ngwaọrụ ọzọ, ma na-eme ka onye ọrụ ma ọ bụ onye na-eme atụmatụ bụrụ onye ahịa na-eche nzọụkwụ ikpeazụ ihu.
 
-N'ịga n'ihu na nsonaazụ ngwa, OmniRoute na-akwụsịkwa ogbugbu mgbe agba abụọ emechara n'otu oge na-emegharị otu oku ngwaọrụ na-enwe nsonaazụ agbanweghị, ma ọ bụ mgbe nsonaazụ ọ bụla akara n'ụzọ doro anya na agba abụọ sochiri anya dara. Nsonaazụ gbanwere na-enye ohere oku ugboro ugboro (dịka ọmụmaatụ, ntuli aka). Onye nche na-amalitegharị na arịrịọ onye ọrụ ọhụrụ, otu oku na-adakọ na otu okirikiri, ma na-akwado Anthropic, Mkparịta ụka mmecha, nzaghachi na akụkọ Gemini. Onye na-eme atụmatụ na-enweta ihe kpatara ya ma nwee azịza ikpeazụ ọ bụrụgodị na ọ rịọrọ ngwá ọrụ ọzọ gburugburu.
+Nhọrọ `config.agenticOrchestration.contextCompaction` na-etinye mmefu ego ịkwụ ụgwọ dị iche tupu onye nhazi ọ bụla ma ọ bụ onye mmebe ezipụ. Kwado ya nke ọma:
 
-Ụdị agbakwunyere mgbe ebumnuche nke abụọ gachara ka a na-enye iwu nkwado ndabere nke ndị mmebe. Nzaghachi HTTP dara ada ma ọ bụ mbugharị mwepu na-aga n'ihu na onye ọrụ na-esote, na-ebu otu mkpebi onye nhazi yana ngwa ala mana nzọụkwụ nke onye mmebe ahụ ozugbo wee kpebie njikọ. A na-eweghachi nzaghachi nke ọma nke mbụ na-agbanweghị, gụnyere SSE gụgharia; Enweghị ike ịnwagharị ọdịda mgbe mmiri malitere ịga nke ọma ebe a. Ọ bụrụ na ndị mmebe niile daa, ọdịda ikpeazụ ga-eweghachite. Ndị ahịa ite ime kwụsị izipu.
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Ndị a bụ usoro mmefu ego agwa JSON ahaziri nke onye na-arụ ọrụ ahọpụtara, ọ bụghị mpio ihe ngosi akara ma ọ bụ oke elu ekwenyere. Kpọmkwem ụdị IDs na-ewepụ ndabara. N'elu ọnụ ụzọ ahụ, kọmpat na-ewepụ nkọwa ngwa ọrụ yiri nke ahụ, jiri mgbari na-ewepụ ihe akaebe ngwaọrụ buru ibu, ma wepụ otu akụkọ ihe mere eme ochie zuru oke na oke ebumnuche. Ọ na-ejigide ntụzịaka system/developer, arịrịọ onye ọrụ kachasị ọhụrụ, ngwa ọrụ ikpeazụ gụnyere calls/results yiri ya, yana nkuzi ụzọ Gemini nke na-eduga. A na-echekwa ntuziaka ọkwa dị elu na ntọala ngwaọrụ. Ihe ndekọ ihe nrịbama ewepụrụ akụkọ ihe mere eme; Nke a bụ trimming deterministic, ọ bụghị nchịkọta nke semantic. Ọ bụrụ na ọnọdụ pinned ka karịrị mmefu ego, arịrịọ ahụ ga-alaghachi 413 tupu ịkpọtụrụ ihe nlereanya ahụ. Na mkpịsị aka nwere nkwarụ ma ọ bụ n'okpuru ọnụ ụzọ, arịrịọ ahụ na-agafe na-agbanweghị agbanwe.
+
+N'ịga n'ihu na nsonaazụ ngwa, OmniRoute na-akwụsịkwa ogbugbu mgbe agba abụọ emechara n'otu oge na-emegharị otu oku ngwaọrụ na-enwe nsonaazụ agbanweghị, ma ọ bụ mgbe nsonaazụ ọ bụla akara n'ụzọ doro anya na agba abụọ sochiri anya dara. Nsonaazụ gbanwere na-enye ohere oku ugboro ugboro (dịka ọmụmaatụ, ntuli aka). Onye nche na-amalitegharị na arịrịọ onye ọrụ ọhụrụ, otu oku na-adakọ na otu okirikiri, ma na-akwado Anthropic, Mkparịta ụka mmecha, nzaghachi na akụkọ Gemini. Onye na-eme atụmatụ na-enweta ihe kpatara ya ma nwee azịza ikpeazụ ọ bụrụgodị na ọ na-arịọ ngwá ọrụ ọzọ gburugburu.
+
+Ụdị agbakwunyere mgbe ebumnuche nke abụọ gachara ka a na-enye iwu nkwado ndabere nke ndị mmebe. Nzaghachi HTTP dara ada ma ọ bụ mbugharị mwepu na-aga n'ihu na onye ọrụ na-esote, na-ebu otu mkpebi onye nhazi yana ngwa ala mana nzọụkwụ nke onye mmebe ahụ ozugbo wee kpebie njikọ. A na-eweghachi nzaghachi nke ọma nke mbụ na-agbanweghị agbanwe, gụnyere SSE gụgharia; Enweghị ike ịnwagharị ọdịda mgbe mmiri malitere ịga nke ọma ebe a. Ọ bụrụ na ndị mmebe niile daa, ọdịda ikpeazụ ga-eweghachite. Ndị ahịa ite ime kwụsị izipu.
 
 ```json
 {
@@ -358,7 +372,7 @@ N'ịga n'ihu na nsonaazụ ngwa, OmniRoute na-akwụsịkwa ogbugbu mgbe agba a
 }
 ```
 
-Onye mmebe ahụ nwere ike ịkpọnye ọtụtụ oku nọọrọ onwe ha n'otu nzaghachi. A na-edozi oku dabere na ntụgharị ngwa ọrụ ndị ahịa mechara, onye nhazi na-enyocha nsonaazụ ọ bụla. `maxToolRounds` ndabara na `8` wee nabata `1`–`32`; ozugbo iru eru, onye na-eme atụmatụ aghaghị iwepụta azịza ikpeazụ kacha mma dị. A na-echekwa mkpebi ndị na-eme atụmatụ ime, ebe nzaghachi ihu ndị ahịa ahọpụtara na-echekwa mmasị nkwanye ugwu mbụ.
+Onye mmebe ahụ nwere ike ịkpọnye ọtụtụ oku nọọrọ onwe ha n'otu nzaghachi. A na-edozi oku dabere na ntụgharị ngwa ọrụ ndị ahịa mechara, onye nhazi na-enyocha nsonaazụ ọ bụla. `maxToolRounds` ndabara na `8` wee nabata `1`–`32`; ozugbo iru eru, onye na-eme atụmatụ aghaghị iwepụta azịza ikpeazụ kacha mma dị. A na-echekwa mkpebi ndị na-eme atụmatụ ime, ebe nzaghachi ndị ahịa ahọpụtara na-echekwa mmasị mbugharị mbugharị.
 
 ### `round-robin` nnyapade ogbe na mgbasawanye akaụntụ
 
@@ -366,7 +380,7 @@ A na-achịkọta gburugburu-robin, ọ bụghị otu arịrịọ-kwa-nzọụk
 
 - `stickyRoundRobinLimit` (nhazi combo, wee `comboStickyRoundRobinLimit`, wee `settings.stickyRoundRobinLimit`, ndabara** 3** ) na-edobe otu ebumnuche ahụ maka ọtụtụ ihe ịga nke ọma n'usoro tupu ịtụgharị. Tọọ mbufe ngwakọta na `1` maka ntụgharị otu arịrịọ. Onye nchịkọta akụkọ combo na-egosi uru bara uru yana oyi akwa ọ si na ya pụta.
 - `connectionAwareExpansion` (nhazi nhazi, wee ntọala, ndabere** ụgha** ) na-agbasa ọkwa ọkwa onye ọ bụla n'ime ebumnuche akaụntụ ọ bụla tupu ntụgharị. Atụmatụ otu-B (ihe dị mkpa, arọ, gburugburu-robin, random, p2c, obere-eji, ọnụ ahịa kacha mma, lkgp, fill-mbụ, siri ike-random, ọnọdụ-kachasị mma, cache-kachasị mma, okirikiri-agba agba, fusion, pipeline) debe nlele ọkwa onye na-eweta ruo mgbe nke a ga-eme. Onye nchịkọta akụkọ combo na-ekpughe ihe nketa / gbanye / gbanyụọ; eketa na-eji ndabara zuru ụwa ọnụ (gbanyụọ).
-- Ntugharị mpaghara cache ozugbo (`promptCacheAffinityEnabled`, ndabara** eziokwu** ) na-enyegharị njikọ ndị etinyere iwu ka igodo cache dabara adaba nọrọ n'otu akaụntụ. Ọ na-ebute ụzọ karịa gburugburu-robin na ngbanwe dị arọ gafere usoro akaụntụ ọ bụla etinyere. Gbanyụọ ya n'okpuru Ntọala → Combo ndabara ma ọ bụrụ na ịchọrọ ntụgharị siri ike. Enweghị nfefe n'otu n'otu.
+- Ntugharị mpaghara cache ozugbo (`promptCacheAffinityEnabled`, ndabara** eziokwu** ) na-enyegharị njikọ ndị etinyere iwu ka igodo cache dabara adaba nọrọ n'otu akaụntụ. Ọ na-ebute ụzọ karịa gburugburu-robin na ntụgharị dị arọ n'ofe usoro akaụntụ ọ bụla etinyere. Gbanyụọ ya n'okpuru Ntọala → Combo ndabara ma ọ bụrụ na ịchọrọ ntụgharị siri ike. Enweghị nfefe n'otu n'otu.
 
 Maka ntụgharị akaụntụ ọtụtụ n'otu ụdị, masịrị** otu dynamic-akaụntụ nzọụkwụ** ( `connectionId` efu, ọdọ mmiri dum) nwere oke nnyapade `1`, ọ bụghị atọ `connectionId` s pinned. Nzọụkwụ agbakwunyere gbakwunyere mmekọrịta na-adaba na otu akaụntụ ọbụlagodi mgbe RR counter na-aga n'ihu.
 

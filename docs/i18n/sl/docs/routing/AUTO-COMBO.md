@@ -313,7 +313,7 @@ kombinirani motor OmniRoute podpira** 20 strategij usmerjanja** (deklarirano v `
 | `random`            | Enotna naključna izbira                                                                                                                                                                                                    |
 | `least-used`        | Izberite cilj z najmanjšo tokovno obremenitvijo                                                                                                                                                                            |
 | `cost-optimized`    | Zmanjšajte $ na zahtevo glede na kataloško ceno                                                                                                                                                                            |
-| `reset-aware` ⭐    | Določite prednost glede na čas ponastavitve kvote — kratka okna ponastavitve so uvrščena višje                                                                                                                             |
+| `reset-aware` ⭐    | Določite prednost glede na čas ponastavitve kvote — kratka okna ponastavitve uvrščena višje                                                                                                                                |
 | `reset-window`      | Prednost imajo cilji, katerih okno kvote se čim prej ponastavi                                                                                                                                                             |
 | `headroom`          | Izberite cilj z največjo preostalo kvoto                                                                                                                                                                                   |
 | `quota-weighted`    | Preskočite izčrpane račune in nato izberite med preostalimi sorazmerno s preostalo kvoto, deljeno z obremenitvijo med letom; obstoječi pogovori ostanejo pripeti                                                           |
@@ -342,6 +342,20 @@ Za strogo rotacijo uporabite `round-robin`; enake uteži na `weighted` dajejo st
 
 Kombinacija `pipeline` z vsaj dvema modeloma se lahko odloči za usmerjanje planner/executor z `config.agenticOrchestration.enabled`. Prva tarča ima načrtovanje in končne odgovore; drugi cilj oddaja klice izvornega orodja odjemalca. OmniRoute zazna nadaljevanje rezultatov orodja iz protokola zahteve, vpraša načrtovalca, ali je potreben še en krog orodij, in izvajalca ali načrtovalca dinamično naredi zadnji korak, obrnjen k stranki.
 
+Izbirni `config.agenticOrchestration.contextCompaction` uporabi ločen proračun koristne obremenitve pred vsakim pošiljanjem načrtovalca ali izvajalca. Izrecno ga omogočite:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+To so serializirani proračuni znakov JSON, ki jih izbere operater, ne kontekstna okna žetonov ali zajamčene zgornje meje. Natančen model IDs preglasi privzeto. Nad pragom zgoščevanje odstrani enake definicije orodij, obreže prevelike dokaze o orodjih s povzetkom in odstrani stare popolne skupine zgodovine proti ciljnemu razmerju. Ohranja navodila system/developer, najnovejšo uporabniško zahtevo, zadnji krog orodij, vključno z vzporednim calls/results, in vodilna navodila za usmerjanje Gemini. Navodila najvišje ravni in nastavitve orodja so ohranjeni. Oznaka izpustitve beleži odstranjeno zgodovino; to je deterministično obrezovanje, ne semantični povzetek. Če pripeti kontekst še vedno presega proračun, zahteva vrne 413, preden vzpostavi stik z modelom. Če je stiskanje onemogočeno ali pod pragom, gre zahteva skozi nespremenjena.
+
 Pri nadaljevanju rezultata orodja OmniRoute prav tako ustavi izvajanje, ko dva zaporedna zaključena kroga ponovita iste klice orodja z nespremenjenimi rezultati ali ko vsak izrecno označen rezultat v dveh zaporednih krogih ni uspel. Spremenjeni rezultati omogočajo ponavljanje klicev (na primer anketiranje). Stražar se ponastavi na novo zahtevo uporabnika, združi vzporedne klice v en krog in podpira Anthropic, zaključke klepetov, odzive in zgodovine Gemini. Načrtovalec prejme razlog in ima v lasti končni odgovor, tudi če zahteva nov krog orodja.
 
 Dodatni modeli po drugem cilju so naročene varnostne kopije izvajalca. Neuspešen odziv HTTP ali izjema pri transportu napreduje k naslednjemu izvajalcu, ki nosi isto odločitev načrtovalca in izvorna orodja, vendar izvajalčev lastni poziv za korak in razrešeno povezavo. Prvi uspešen odgovor je vrnjen nespremenjen, vključno s pretakanjem SSE ; napak po uspešnem začetku toka tukaj ni mogoče znova poskusiti. Če vsi izvajalci ne uspejo, se vrne zadnja napaka. Naročnik prekine zaustavitev pošiljanja.
@@ -356,15 +370,15 @@ Dodatni modeli po drugem cilju so naročene varnostne kopije izvajalca. Neuspeš
 }
 ```
 
-Izvajalec lahko v enem odzivu odda več neodvisnih klicev. Odvisni klici se obravnavajo v poznejših obračanjih rezultatov orodij strank, pri čemer načrtovalec pregleda vsak rezultat. `maxToolRounds` je privzeto nastavljen na `8` in sprejema `1`–`32`; ko je dosežen, mora načrtovalec pripraviti najboljši razpoložljivi končni odgovor. Odločitve notranjega načrtovalca so shranjene v medpomnilniku, medtem ko izbrani odziv, obrnjen k odjemalcu, ohrani prvotne nastavitve pretakanja.
+Izvajalec lahko v enem odzivu odda več neodvisnih klicev. Odvisni klici se obravnavajo v poznejših obračanjih rezultatov orodja odjemalca, pri čemer načrtovalec pregleda vsak rezultat. `maxToolRounds` je privzeta nastavitev `8` in sprejema `1`–`32`; ko je dosežen, mora načrtovalec pripraviti najboljši razpoložljivi končni odgovor. Odločitve notranjega načrtovalca so shranjene v medpomnilniku, medtem ko izbrani odziv, obrnjen k odjemalcu, ohrani prvotne nastavitve pretakanja.
 
 ### `round-robin` sticky batch in razširitev računa
 
 Round-robin je paketen, ne ena zahteva na korak:
 
 - `stickyRoundRobinLimit` (kombinirana konfiguracija, nato `comboStickyRoundRobinLimit`, nato `settings.stickyRoundRobinLimit`, privzeto** 3** ) ohrani isto tarčo za toliko zaporednih uspehov pred rotacijo. Nastavite kombinirano preglasitev na `1` za rotacijo z eno zahtevo. Kombinirani urejevalnik prikazuje efektivno vrednost in iz katere plasti prihaja.
-- `connectionAwareExpansion` (kombinirana konfiguracija, nato nastavitve, privzeto** lažno** ) razširi vsak korak na ravni ponudnika na cilje za posamezen račun pred menjavo. Strategije skupine B (prioritetne, tehtane, krožne, naključne, p2c, najmanj uporabljene, stroškovno optimizirane, lkgp, najprej izpolni, strogo naključne, kontekstno optimizirane, predpomnilniško optimizirane, kontekstno posredovane, fusion, cevovod) ohranjajo pogled na ravni ponudnika, dokler ni vklopljen. Kombinirani urejevalnik izpostavi podedovanje / vklop / izklop; inherit uporablja globalno privzeto (izklopljeno).
-- Lokalno usmerjanje v predpomnilniku pozivov (`promptCacheAffinityEnabled`, privzeto** res** ) preureja pripete povezave, tako da ujemajoči se ključi predpomnilnika ostanejo na enem računu. Ima prednost pred krožnim in uteženim vrtenjem v pripetih korakih na račun. Izklopite ga v nastavitvah → Combo defaults, če potrebujete strogo rotacijo. Ni preglasitve posamezne kombinacije.
+- `connectionAwareExpansion` (kombinirana konfiguracija, nato nastavitve, privzeto** lažno** ) razširi vsak korak na ravni ponudnika na cilje za posamezen račun pred menjavo. Strategije skupine B (prioritetne, tehtane, krožne, naključne, p2c, najmanj uporabljene, stroškovno optimizirane, lkgp, najprej izpolni, strogo naključne, kontekstno optimizirane, predpomnilniško optimizirane, kontekstno posredovane, fusion, cevovod) ohranjajo pogled na ravni ponudnika, dokler ni vklopljen. Kombo urejevalnik izpostavi podedovanje / vklop / izklop; inherit uporablja globalno privzeto (izklopljeno).
+- Lokalno usmerjanje v predpomnilniku pozivov (`promptCacheAffinityEnabled`, privzeto** res** ) preureja pripete povezave, tako da ujemajoči se ključi predpomnilnika ostanejo na enem računu. Ima prednost pred krožnim in ponderiranim vrtenjem v pripetih korakih na račun. Izklopite ga v nastavitvah → Combo defaults, če potrebujete strogo rotacijo. Ni preglasitve posamezne kombinacije.
 
 Za rotacijo več računov na enem modelu raje** en korak dinamičnega računa** (prazen `connectionId`, cel bazen) z lepljivo mejo `1`, ne s tremi pripetimi `connectionId` s. Pripeti koraki in afiniteta se strnejo na isti račun, tudi ko števec RR napreduje.
 

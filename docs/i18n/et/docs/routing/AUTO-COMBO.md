@@ -325,6 +325,20 @@ Rangeks pööramiseks kasutage `round-robin`; `weighted` võrdsed kaalud annavad
 
 Vähemalt kahe mudeliga `pipeline` kombo saab valida planner/executor marsruutimise koos `config.agenticOrchestration.enabled`. Esimene sihtmärk omab planeerimist ja lõplikke vastuseid; teine sihtmärk kiirgab kliendipõhiseid tööriistakutseid. OmniRoute tuvastab päringuprotokolli tööriista-tulemuse jätkud, küsib planeerijalt, kas on vaja veel ühte tööriistavooru, ja muudab dünaamiliselt kas täitja või planeerija kliendipoolseks viimaseks sammuks.
 
+Valikuline `config.agenticOrchestration.contextCompaction` rakendab enne iga planeerija või täitja saatmist eraldi kasuliku koormuse eelarvet. Luba see selgesõnaliselt:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Need on operaatori valitud jadapõhised JSON -märgieelarved, mitte loa konteksti aknad ega garanteeritud ülesvoolu piirangud. Täpne mudel IDs alistab vaikeväärtuse. Üle läve eemaldab tihendamine identsed tööriistamääratlused, kärbib liiga suured tööriistade tõendid kokkuvõttega ja eemaldab vanad täielikud ajaloorühmad sihtsuhte suunas. See säilitab system/developer juhised, viimase kasutajapäringu, viimase tööriistavooru, sealhulgas paralleelse calls/results, ja Gemini juhtiva marsruutimisjuhise. Säilitatakse tipptasemel juhised ja tööriista seaded. Väljajätmise marker salvestab eemaldatud ajaloo; see on deterministlik kärpimine, mitte semantiline kokkuvõte. Kui kinnitatud kontekst ületab ikkagi eelarvet, tagastab päring enne mudeliga ühenduse võtmist numbri 413. Kui tihendamine on keelatud või alla läve, edastatakse taotlus muutmata kujul.
+
 Tööriistatulemuse jätkamisel peatab OmniRoute täitmise ka siis, kui kaks järjestikust lõpetatud vooru kordavad sama tööriistakutset muutumatute tulemustega või kui iga selgelt märgitud tulemus kahes järjestikuses voorus ebaõnnestus. Muudetud tulemused võimaldavad korduvaid kõnesid (näiteks küsitlusi). Valvur lähtestub uue kasutaja taotluse alusel, rühmitab paralleelkõned ühte vooru ning toetab Anthropic, vestluse lõpetamist, vastuseid ja Gemini ajalugu. Planeerija saab põhjuse ja talle kuulub lõplik vastus isegi siis, kui ta nõuab uut tööriistavooru.
 
 Täiendavad mudelid pärast teist sihtmärki on tellitud täitja varukoopiad. Ebaõnnestunud HTTP vastus või transpordierand liigub edasi järgmisele täitjale, kandes sama planeerija otsust ja natiivseid tööriistu, kuid selle täitja enda sammuviip ja lahendatud ühendus. Esimene edukas vastus tagastatakse muutmata kujul, sealhulgas SSE voogesitus; ebaõnnestumisi pärast edukat voo algust ei saa siin uuesti proovida. Kui kõik täitjad ebaõnnestuvad, tagastatakse viimane ebaõnnestumine. Klient katkestab saatmise.

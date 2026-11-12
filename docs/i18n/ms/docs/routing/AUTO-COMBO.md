@@ -303,7 +303,7 @@ ditentukan disalurkan kepada input `config.modePack` / `config.budgetCap` /
 
 ## Semua Strategi Laluan
 
-enjin kombo OmniRoute menyokong** 20 strategi laluan** (diisytiharkan dalam `src/shared/constants/routingStrategies.ts` → `ROUTING_STRATEGY_VALUES`). Enjin Auto Combo itu sendiri terdedah di bawah strategi `auto` ; yang lain tersedia untuk kombo berterusan.
+enjin kombo OmniRoute menyokong** 20 strategi penghalaan** (diisytiharkan dalam `src/shared/constants/routingStrategies.ts` → `ROUTING_STRATEGY_VALUES`). Enjin Auto Combo sendiri terdedah di bawah strategi `auto` ; yang lain tersedia untuk kombo berterusan.
 
 | Strategi            | Penerangan                                                                                                                                                                                             |
 | :------------------ | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -344,6 +344,20 @@ Untuk putaran ketat gunakan `round-robin`; pemberat yang sama pada `weighted` me
 ### Mod saluran paip agen
 
 Kombo `pipeline` dengan sekurang-kurangnya dua model boleh mengikut serta dalam penghalaan planner/executor dengan `config.agenticOrchestration.enabled`. Sasaran pertama memiliki perancangan dan jawapan akhir; sasaran kedua mengeluarkan panggilan alat asli klien. OmniRoute mengesan kesinambungan hasil alat daripada protokol permintaan, bertanya kepada perancang sama ada pusingan alat lain diperlukan, dan secara dinamik menjadikan sama ada pelaksana atau perancang langkah terakhir yang dihadapi pelanggan.
+
+`config.agenticOrchestration.contextCompaction` pilihan menggunakan belanjawan muatan berasingan sebelum setiap penghantaran perancang atau pelaksana. Dayakannya secara eksplisit:
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Ini ialah belanjawan aksara JSON bersiri yang dipilih oleh pengendali, bukan tetingkap konteks token atau had huluan yang dijamin. Model tepat IDs mengatasi lalai. Di atas ambang, pemadatan mengalih keluar definisi alat yang sama, memangkas bukti alat bersaiz besar dengan ringkasan dan mengalih keluar kumpulan sejarah lengkap lama ke arah nisbah sasaran. Ia mengekalkan arahan system/developer, permintaan pengguna terkini, pusingan alat terakhir termasuk calls/results selari, dan arahan penghalaan utama Gemini. Arahan peringkat atas dan tetapan alat dikekalkan. Penanda peninggalan merekodkan sejarah yang dialih keluar; ini adalah pemangkasan deterministik, bukan ringkasan semantik. Jika konteks yang disematkan masih melebihi belanjawan, permintaan mengembalikan 413 sebelum menghubungi model. Dengan pemadatan dilumpuhkan atau di bawah ambang permintaan melalui tidak berubah.
 
 Pada penerusan hasil alat, OmniRoute juga menghentikan pelaksanaan apabila dua pusingan selesai berturut-turut mengulangi panggilan alat yang sama dengan keputusan yang tidak berubah, atau apabila setiap yang ditanda secara eksplisit menghasilkan dua pusingan berturut-turut gagal. Keputusan yang diubah membenarkan panggilan berulang (contohnya, pengundian). Pengawal menetapkan semula pada permintaan pengguna baharu, mengumpulkan panggilan selari ke dalam satu pusingan, dan menyokong Anthropic, Penyelesaian Sembang, Respons dan sejarah Gemini. Perancang menerima sebab dan memiliki jawapan akhir walaupun ia meminta pusingan alat lain.
 

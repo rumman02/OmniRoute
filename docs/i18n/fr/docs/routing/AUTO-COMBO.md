@@ -345,6 +345,20 @@ Pour une rotation stricte, utilisez `round-robin`; des poids égaux sur `weighte
 
 Un combo `pipeline` avec au moins deux modèles peut opter pour le routage planner/executor avec `config.agenticOrchestration.enabled`. La première cible possède la planification et les réponses finales ; la deuxième cible émet des appels d’outils natifs du client. OmniRoute détecte les suites des résultats de l'outil à partir du protocole de requête, demande au planificateur si un autre cycle d'outils est nécessaire et fait de l'exécuteur ou du planificateur l'étape finale face au client de manière dynamique.
 
+`config.agenticOrchestration.contextCompaction` facultatif applique un budget de charge utile distinct avant chaque expédition du planificateur ou de l'exécuteur. Activez-le explicitement :
+
+```json
+{
+  "enabled": true,
+  "defaultMaxChars": 400000,
+  "targetRatio": 0.72,
+  "toolResultMaxChars": 24000,
+  "modelMaxChars": { "provider/planner": 175000, "provider/executor": 300000 }
+}
+```
+
+Il s'agit de budgets de caractères JSON sérialisés sélectionnés par l'opérateur, et non de fenêtres de contexte de jeton ou de limites en amont garanties. Le modèle exact IDs remplace la valeur par défaut. Au-dessus du seuil, le compactage supprime les définitions d'outils identiques, réduit les preuves d'outils surdimensionnées avec un résumé et supprime les anciens groupes d'historique complet pour atteindre le ratio cible. Il conserve les instructions system/developer, la dernière demande de l'utilisateur, le dernier cycle d'outils incluant calls/results parallèle et l'instruction de routage principale de Gemini. Les instructions de niveau supérieur et les paramètres des outils sont conservés. Un marqueur d'omission enregistre l'historique des suppressions ; il s'agit d'un découpage déterministe, pas d'un résumé sémantique. Si le contexte épinglé dépasse toujours le budget, la requête renvoie 413 avant de contacter le modèle. Avec le compactage désactivé ou en dessous du seuil, la requête passe sans changement.
+
 Lors des continuations de résultats d'outils, OmniRoute arrête également l'exécution lorsque deux tours consécutifs terminés répètent les mêmes appels d'outil avec des résultats inchangés, ou lorsque chaque résultat explicitement marqué dans deux tours consécutifs a échoué. Les résultats modifiés autorisent des appels répétés (par exemple, un sondage). La protection se réinitialise à la demande d'un nouvel utilisateur, regroupe les appels parallèles en un seul cycle et prend en charge les historiques Anthropic, Chat Completions, Réponses et Gemini. Le planificateur reçoit la raison et possède la réponse finale même s'il demande un autre tour d'outil.
 
 Les modèles supplémentaires après la deuxième cible reçoivent des sauvegardes d'exécuteur ordonnées. Une réponse HTTP ou une exception de transport ayant échoué passe à l'exécuteur suivant, transportant la même décision de planificateur et les mêmes outils natifs, mais l'invite d'étape et la connexion résolue de cet exécuteur. La première réponse réussie est renvoyée inchangée, y compris le streaming SSE ; les échecs après le démarrage réussi d’un flux ne peuvent pas être réessayés ici. Si tous les exécuteurs échouent, le dernier échec est renvoyé. Le client abandonne l’envoi d’arrêt.
@@ -366,7 +380,7 @@ L'exécuteur peut émettre plusieurs appels indépendants en une seule réponse.
 Le round-robin est un processus groupé et non une requête par étape :
 
 - `stickyRoundRobinLimit` (configuration combinée, puis `comboStickyRoundRobinLimit`, puis `settings.stickyRoundRobinLimit`, par défaut** 3** ) conserve le même objectif pour autant de succès consécutifs avant la rotation. Définissez le remplacement du combo sur `1` pour une rotation à une demande. L'éditeur de combo affiche la valeur effective et de quelle couche elle provient.
-- `connectionAwareExpansion` (configuration combinée, puis paramètres, par défaut** FAUX** ) étend chaque étape au niveau du fournisseur en cibles par compte avant la rotation. Les stratégies du groupe B (prioritaire, pondérée, round-robin, aléatoire, p2c, la moins utilisée, optimisée en termes de coût, lkgp, fill-first, strictement aléatoire, optimisée pour le contexte, optimisée pour le cache, relais contextuel, fusion, pipeline) conservent une vue au niveau du fournisseur jusqu'à ce que cette option soit activée. L'éditeur combo expose hériter/on/off ; hériter utilise la valeur par défaut globale (off).
+- `connectionAwareExpansion` (config combo, puis paramètres, par défaut** FAUX** ) étend chaque étape au niveau du fournisseur en cibles par compte avant la rotation. Les stratégies du groupe B (prioritaire, pondérée, round-robin, aléatoire, p2c, la moins utilisée, optimisée en termes de coût, lkgp, fill-first, strictement aléatoire, optimisée pour le contexte, optimisée pour le cache, relais contextuel, fusion, pipeline) conservent une vue au niveau du fournisseur jusqu'à ce que cette option soit activée. L'éditeur combo expose hériter/on/off ; hériter utilise la valeur par défaut globale (off).
 - Routage de localité d'invite-cache (`promptCacheAffinityEnabled`, par défaut** vrai** ) réorganise les connexions épinglées afin que les clés de cache correspondantes restent sur un seul compte. Il a la priorité sur la rotation circulaire et pondérée entre les étapes épinglées par compte. Désactivez-le sous Paramètres par défaut de → Combo si vous avez besoin d'une rotation stricte. Il n’y a pas de remplacement par combo.
 
 Pour une rotation multi-comptes sur un seul modèle, préférez** une étape de compte dynamique** ( `connectionId` vide, pool entier) avec limite collante `1`, pas trois `connectionId` épinglés. Les étapes épinglées et l'affinité s'effondrent sur le même compte même pendant que le compteur RR avance.
